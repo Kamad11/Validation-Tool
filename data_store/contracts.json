@@ -1,0 +1,549 @@
+{
+  "1411107701000": {
+    "mpan": "1411107701000",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "The Oaklands Centre",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 0.268042,
+    "standing_charge_rate_raw": 26.8042,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.233411,
+        "value_raw": 23.3411,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.233411,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.815128Z"
+  },
+  "1410508111000": {
+    "mpan": "1410508111000",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "8 9",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 0.639571,
+    "standing_charge_rate_raw": 63.9571,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.816130Z"
+  },
+  "1420604100007": {
+    "mpan": "1420604100007",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "Birmingham District Energy Company",
+    "meter_type": "HH",
+    "tariff_type": "day_night",
+    "standing_charge_rate": 0.657534,
+    "standing_charge_rate_raw": 65.7534,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "DAY",
+        "value": 0.176658,
+        "value_raw": 17.6658,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "NIGHT",
+        "value": 0.151908,
+        "value_raw": 15.1908,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": 0.176658,
+    "night_rate": 0.151908,
+    "single_rate": 0.176658,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.816130Z"
+  },
+  "1412508111004": {
+    "mpan": "1412508111004",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "UNIT 10 WHITTALL STREET",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 0.639571,
+    "standing_charge_rate_raw": 63.9571,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.816130Z"
+  },
+  "1429704100009": {
+    "mpan": "1429704100009",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "Birmingham Dental Hospital",
+    "meter_type": "HH",
+    "tariff_type": "day_night",
+    "standing_charge_rate": 0.657534,
+    "standing_charge_rate_raw": 65.7534,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "DAY",
+        "value": 0.18299700000000002,
+        "value_raw": 18.2997,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "NIGHT",
+        "value": 0.153894,
+        "value_raw": 15.3894,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": 0.18299700000000002,
+    "night_rate": 0.153894,
+    "single_rate": 0.18299700000000002,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.816130Z"
+  },
+  "1411508111002": {
+    "mpan": "1411508111002",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "UNIT 9 WHITTALL STREET",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 0.639571,
+    "standing_charge_rate_raw": 63.9571,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.816130Z"
+  },
+  "1417174441002": {
+    "mpan": "1417174441002",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "102 Blakesley Road",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 1.104192,
+    "standing_charge_rate_raw": 110.4192,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.816130Z"
+  },
+  "1418408111000": {
+    "mpan": "1418408111000",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "Unit 6 Rowchester Court",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 1.104192,
+    "standing_charge_rate_raw": 110.4192,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.817158Z"
+  },
+  "1413508111006": {
+    "mpan": "1413508111006",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "Birmingham Post And Mail",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 1.104192,
+    "standing_charge_rate_raw": 110.4192,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.817158Z"
+  },
+  "1470000808121": {
+    "mpan": "1470000808121",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "BCH Legacy No 2",
+    "meter_type": "HH",
+    "tariff_type": "day_night",
+    "standing_charge_rate": 0.657534,
+    "standing_charge_rate_raw": 65.7534,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "DAY",
+        "value": 0.18293199999999998,
+        "value_raw": 18.2932,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "NIGHT",
+        "value": 0.154004,
+        "value_raw": 15.4004,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": 0.18293199999999998,
+    "night_rate": 0.154004,
+    "single_rate": 0.18293199999999998,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.817158Z"
+  },
+  "1470000808130": {
+    "mpan": "1470000808130",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "BCH Legacy No 2",
+    "meter_type": "HH",
+    "tariff_type": "day_night",
+    "standing_charge_rate": 0.657534,
+    "standing_charge_rate_raw": 65.7534,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "DAY",
+        "value": 0.182549,
+        "value_raw": 18.2549,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "NIGHT",
+        "value": 0.153866,
+        "value_raw": 15.3866,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": 0.182549,
+    "night_rate": 0.153866,
+    "single_rate": 0.182549,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.817158Z"
+  },
+  "1419408111001": {
+    "mpan": "1419408111001",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "Unit 7 Rowchester Court",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 1.104192,
+    "standing_charge_rate_raw": 110.4192,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.817158Z"
+  },
+  "1418174441004": {
+    "mpan": "1418174441004",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "THE CHIROPODY SURGERY",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 0.400993,
+    "standing_charge_rate_raw": 40.0993,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.818159Z"
+  },
+  "1415508111000": {
+    "mpan": "1415508111000",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "1 Printing House Street",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 2.661108,
+    "standing_charge_rate_raw": 266.1108,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.229845,
+        "value_raw": 22.9845,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.229845,
+    "effective_start": "2025-04-01",
+    "effective_end": "2026-03-31",
+    "source_file": "BWC Management Services Contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.818159Z"
+  },
+  "1413767203005": {
+    "mpan": "1413767203005",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "CHILDRENS HOSPITAL NHS FOUNDA",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 2.661108,
+    "standing_charge_rate_raw": 266.1108,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "SINGLE",
+        "value": 0.207059,
+        "value_raw": 20.7059,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": null,
+    "single_rate": 0.207059,
+    "effective_start": "2025-07-25",
+    "effective_end": "2026-03-31",
+    "source_file": "Additional EDF contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.828297Z"
+  },
+  "1420724500002": {
+    "mpan": "1420724500002",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "BIRMINGHAM CHILDRENS HOSPITAL",
+    "meter_type": "NHH",
+    "tariff_type": "single",
+    "standing_charge_rate": 2.661108,
+    "standing_charge_rate_raw": 266.1108,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "WIWDPKDJ",
+        "value": 0.532976,
+        "value_raw": 53.2976,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "WWDXPKDJ",
+        "value": 0.210613,
+        "value_raw": 21.0613,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "WIWDPKNF",
+        "value": 0.536483,
+        "value_raw": 53.6483,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "WWDXPKNF",
+        "value": 0.206578,
+        "value_raw": 20.6578,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "NIGHT",
+        "value": 0.160293,
+        "value_raw": 16.0293,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "AOT",
+        "value": 0.190349,
+        "value_raw": 19.0349,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": null,
+    "night_rate": 0.160293,
+    "single_rate": 0.532976,
+    "effective_start": "2025-07-25",
+    "effective_end": "2026-03-31",
+    "source_file": "Additional EDF contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.828297Z"
+  },
+  "1470001297160": {
+    "mpan": "1470001297160",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "SUPPLY NO2",
+    "meter_type": "HH",
+    "tariff_type": "day_night",
+    "standing_charge_rate": 0.657534,
+    "standing_charge_rate_raw": 65.7534,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "DAY",
+        "value": 0.171524,
+        "value_raw": 17.1524,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "NIGHT",
+        "value": 0.14185999999999999,
+        "value_raw": 14.186,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": 0.171524,
+    "night_rate": 0.14185999999999999,
+    "single_rate": 0.171524,
+    "effective_start": "2025-04-25",
+    "effective_end": "2026-03-31",
+    "source_file": "Additional EDF contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.828297Z"
+  },
+  "1470001297151": {
+    "mpan": "1470001297151",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "SUPPLY NO1",
+    "meter_type": "HH",
+    "tariff_type": "day_night",
+    "standing_charge_rate": 0.657534,
+    "standing_charge_rate_raw": 65.7534,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "DAY",
+        "value": 0.174759,
+        "value_raw": 17.4759,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "NIGHT",
+        "value": 0.14296699999999998,
+        "value_raw": 14.2967,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": 0.174759,
+    "night_rate": 0.14296699999999998,
+    "single_rate": 0.174759,
+    "effective_start": "2025-04-24",
+    "effective_end": "2026-03-31",
+    "source_file": "Additional EDF contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.828297Z"
+  },
+  "1470001828262": {
+    "mpan": "1470001828262",
+    "customer_name": "BWC Management Services Ltd",
+    "site_address": "PARKVIEW CLINIC",
+    "meter_type": "HH",
+    "tariff_type": "day_night",
+    "standing_charge_rate": 0.657534,
+    "standing_charge_rate_raw": 65.7534,
+    "standing_charge_uom": "PENCE_PER_DAY",
+    "rate_components": [
+      {
+        "description": "DAY",
+        "value": 0.190788,
+        "value_raw": 19.0788,
+        "uom": "PENCE_PER_KWH"
+      },
+      {
+        "description": "NIGHT",
+        "value": 0.15228,
+        "value_raw": 15.228,
+        "uom": "PENCE_PER_KWH"
+      }
+    ],
+    "day_rate": 0.190788,
+    "night_rate": 0.15228,
+    "single_rate": 0.190788,
+    "effective_start": "2024-10-23",
+    "effective_end": "2026-03-31",
+    "source_file": "Additional EDF contract rates.xlsx",
+    "updated_at": "2026-04-20T14:25:03.828297Z"
+  }
+}

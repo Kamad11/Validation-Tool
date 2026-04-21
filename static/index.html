@@ -1,0 +1,545 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Bill Validator POC</title>
+  <style>
+    :root {
+      --bg: #f2f5f9;
+      --panel: #ffffff;
+      --ink: #0f172a;
+      --muted: #475569;
+      --accent: #0e7490;
+      --ok: #166534;
+      --warn: #854d0e;
+      --bad: #991b1b;
+      --border: #dbe4ee;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: "Segoe UI", "Trebuchet MS", sans-serif;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 15% 10%, #d6f0ff, transparent 35%),
+        radial-gradient(circle at 90% 90%, #ffe8ce, transparent 30%),
+        var(--bg);
+    }
+    .wrap { max-width: 1080px; margin: 24px auto; padding: 0 16px; }
+    h1 { margin: 0 0 12px; letter-spacing: 0.3px; }
+    .sub { color: var(--muted); margin-bottom: 18px; }
+    .grid { display: grid; gap: 14px; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); }
+    .card {
+      background: var(--panel);
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 14px;
+      box-shadow: 0 10px 20px rgba(2, 6, 23, 0.05);
+    }
+    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    input[type=file], input[type=text] {
+      width: 100%;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      padding: 8px 10px;
+      background: #fff;
+    }
+    button {
+      border: none;
+      background: var(--accent);
+      color: #fff;
+      padding: 9px 14px;
+      border-radius: 8px;
+      cursor: pointer;
+      font-weight: 600;
+    }
+    button:hover { filter: brightness(1.05); }
+    .status { font-size: 13px; color: var(--muted); margin-top: 8px; min-height: 18px; }
+    .chat-box {
+      border: 1px solid var(--border);
+      background: #f8fbff;
+      border-radius: 10px;
+      height: 280px;
+      overflow: auto;
+      padding: 10px;
+      margin-bottom: 8px;
+      font-size: 14px;
+    }
+    .msg { margin: 0 0 10px; line-height: 1.35; }
+    .user { color: #0f172a; }
+    .bot { color: #134e4a; }
+    .mono {
+      white-space: pre-wrap;
+      font-family: Consolas, "SFMono-Regular", Menlo, monospace;
+      background: #fbfdff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      max-height: 320px;
+      overflow: auto;
+      font-size: 12px;
+    }
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(120px, 1fr));
+      gap: 10px;
+      margin: 8px 0 10px;
+    }
+    .metric {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: #f9fcff;
+    }
+    .metric .label { font-size: 12px; color: var(--muted); }
+    .metric .value { font-size: 20px; font-weight: 700; margin-top: 2px; }
+    .badge {
+      display: inline-block;
+      padding: 4px 10px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .badge-pass { background: var(--ok); }
+    .badge-fail { background: var(--bad); }
+    .reasons {
+      margin: 8px 0 10px;
+      padding-left: 18px;
+      font-size: 13px;
+      color: #1f2937;
+    }
+    .reasons li { margin-bottom: 5px; }
+    .table-wrap {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      overflow: auto;
+      background: #fff;
+      max-height: 300px;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      min-width: 760px;
+    }
+    th, td {
+      border-bottom: 1px solid #e2e8f0;
+      padding: 7px 8px;
+      text-align: left;
+      vertical-align: top;
+    }
+    th {
+      position: sticky;
+      top: 0;
+      background: #eef7ff;
+      z-index: 1;
+      font-weight: 700;
+    }
+    .pill-pass, .pill-fail, .pill-na {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #fff;
+    }
+    .pill-pass { background: var(--ok); }
+    .pill-fail { background: var(--bad); }
+    .pill-na { background: #64748b; }
+    .band-Green { color: var(--ok); font-weight: 700; }
+    .band-Amber { color: var(--warn); font-weight: 700; }
+    .band-Red { color: var(--bad); font-weight: 700; }
+    .score-track {
+      width: 100%;
+      height: 12px;
+      border-radius: 999px;
+      background: #e2e8f0;
+      overflow: hidden;
+      margin: 8px 0 12px;
+    }
+    .score-fill {
+      height: 100%;
+      width: 0%;
+      background: linear-gradient(90deg, #dc2626 0%, #f59e0b 55%, #16a34a 100%);
+      transition: width 300ms ease;
+    }
+    .split {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      margin: 10px 0;
+    }
+    .mini {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px;
+      background: #fafcff;
+    }
+    .mini h4 {
+      margin: 0 0 8px;
+      font-size: 13px;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Invoice Validator Chatbot - Local POC</h1>
+    <div class="sub">Upload contracts and invoices, validate by MPAN, and ask grounded questions.</div>
+
+    <div class="grid">
+      <section class="card">
+        <h3>1) Contract Upload (Excel)</h3>
+        <div class="status">Use existing bundled contracts, or upload a new contract Excel.</div>
+        <div class="row" style="margin-top:8px">
+          <button id="loadExistingContractsBtn">Use Existing Contract Files</button>
+        </div>
+        <div style="height:8px"></div>
+        <input id="contractFile" type="file" accept=".xlsx,.xls" />
+        <div class="row" style="margin-top:8px">
+          <button id="uploadContractBtn">Upsert Contract Data</button>
+        </div>
+        <div id="contractStatus" class="status"></div>
+      </section>
+
+      <section class="card">
+        <h3>2) Invoice Upload + Validate (PDF)</h3>
+        <input id="invoiceFile" type="file" accept=".pdf" />
+        <label class="row" style="margin-top:8px; font-size:13px; color:#334155;">
+          <input id="compareMeterToggle" type="checkbox" checked />
+          Compare with meter data
+        </label>
+        <div class="row" style="margin-top:8px">
+          <button id="validateInvoiceBtn">Validate Invoice</button>
+        </div>
+        <div id="invoiceStatus" class="status"></div>
+      </section>
+    </div>
+
+    <div class="grid" style="margin-top:14px">
+      <section class="card">
+        <h3>3) Ask Grounded Questions</h3>
+        <div class="chat-box" id="chatBox"></div>
+        <input id="invoiceNumberInput" type="text" placeholder="Optional invoice number (e.g. 000027224635)" />
+        <div style="height:8px"></div>
+        <input id="chatInput" type="text" placeholder="Ask anything to validate from uploaded data..." />
+        <div class="row" style="margin-top:8px">
+          <button id="sendChatBtn">Send</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h3>Latest Validation Result</h3>
+        <div id="tabValidation">
+          <div id="scoreLine" class="status">No validation run yet.</div>
+          <div id="meterDataNote" class="status"></div>
+          <div class="score-track"><div id="scoreFill" class="score-fill"></div></div>
+          <div class="metrics">
+            <div class="metric">
+              <div class="label">Status</div>
+              <div class="value" id="metricStatus">-</div>
+            </div>
+            <div class="metric">
+              <div class="label">Score</div>
+              <div class="value" id="metricScore">-</div>
+            </div>
+            <div class="metric">
+              <div class="label">Band</div>
+              <div class="value" id="metricBand">-</div>
+            </div>
+          </div>
+          <div class="split">
+            <div class="mini">
+              <h4>Top Validation Reasons</h4>
+              <ul id="reasonsList" class="reasons"><li>Run a validation to view reasons.</li></ul>
+            </div>
+            <div class="mini">
+              <h4>Score Deductions</h4>
+              <ul id="deductionsList" class="reasons"><li>No deductions yet.</li></ul>
+            </div>
+          </div>
+          <strong id="mpanSummaryTitle">MPAN Cost Summary</strong>
+          <div class="table-wrap" style="margin-bottom:10px">
+            <table>
+              <thead>
+                <tr>
+                  <th>MPAN</th>
+                  <th>Status</th>
+                  <th>Reasons</th>
+                  <th>Invoice Energy Cost</th>
+                  <th>Expected (Contract x Invoice Usage)</th>
+                  <th id="mpanMeterCostHeader">Expected (Contract x Meter Usage)</th>
+                  <th>Score Impact</th>
+                </tr>
+              </thead>
+              <tbody id="mpanSummaryTbody">
+                <tr><td colspan="7">No summary yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <strong id="comparisonTitle">Comparison Table (Invoice vs Contract vs Meter)</strong>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>MPAN</th>
+                  <th>Check</th>
+                  <th>Invoice</th>
+                  <th>Contract</th>
+                  <th id="comparisonMeterHeader">Meter</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="comparisonTbody">
+                <tr><td colspan="6">No validation yet.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <details style="margin-top:10px">
+            <summary style="cursor:pointer; color:#0f172a;">Raw Validation JSON</summary>
+            <div id="resultJson" class="mono" style="margin-top:8px"></div>
+          </details>
+        </div>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    const api = (path, opts) => fetch(path, opts).then(async r => {
+      const data = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(data.error || `HTTP ${r.status}`);
+      return data;
+    });
+
+    const contractFile = document.getElementById("contractFile");
+    const invoiceFile = document.getElementById("invoiceFile");
+    const compareMeterToggle = document.getElementById("compareMeterToggle");
+    const contractStatus = document.getElementById("contractStatus");
+    const invoiceStatus = document.getElementById("invoiceStatus");
+    const resultJson = document.getElementById("resultJson");
+    const scoreLine = document.getElementById("scoreLine");
+    const meterDataNote = document.getElementById("meterDataNote");
+    const metricStatus = document.getElementById("metricStatus");
+    const metricScore = document.getElementById("metricScore");
+    const metricBand = document.getElementById("metricBand");
+    const reasonsList = document.getElementById("reasonsList");
+    const comparisonTbody = document.getElementById("comparisonTbody");
+    const deductionsList = document.getElementById("deductionsList");
+    const mpanSummaryTbody = document.getElementById("mpanSummaryTbody");
+    const mpanMeterCostHeader = document.getElementById("mpanMeterCostHeader");
+    const comparisonMeterHeader = document.getElementById("comparisonMeterHeader");
+    const comparisonTitle = document.getElementById("comparisonTitle");
+    const scoreFill = document.getElementById("scoreFill");
+    const chatBox = document.getElementById("chatBox");
+    const chatInput = document.getElementById("chatInput");
+    const invoiceNumberInput = document.getElementById("invoiceNumberInput");
+
+    function renderJSON(obj) {
+      resultJson.textContent = JSON.stringify(obj, null, 2);
+    }
+
+    function fmt(value) {
+      if (value === null || value === undefined) return "-";
+      if (typeof value === "number") return Number.isInteger(value) ? String(value) : value.toFixed(4);
+      return String(value);
+    }
+
+    function syncMeterColumns(showMeter) {
+      mpanMeterCostHeader.style.display = showMeter ? "" : "none";
+      comparisonMeterHeader.style.display = showMeter ? "" : "none";
+      comparisonTitle.textContent = showMeter
+        ? "Comparison Table (Invoice vs Contract vs Meter)"
+        : "Comparison Table (Invoice vs Contract)";
+      const mpanFirstRowCell = mpanSummaryTbody.querySelector("tr td[colspan]");
+      if (mpanFirstRowCell) mpanFirstRowCell.colSpan = showMeter ? 7 : 6;
+      const comparisonFirstRowCell = comparisonTbody.querySelector("tr td[colspan]");
+      if (comparisonFirstRowCell) comparisonFirstRowCell.colSpan = showMeter ? 6 : 5;
+    }
+
+    function renderValidation(out) {
+      const v = out.validation || {};
+      const bandClass = `band-${v.score_band}`;
+      const isPass = v.status === "PASS";
+      const meterEnabled = v.meter_comparison_enabled !== false;
+      compareMeterToggle.checked = meterEnabled;
+      scoreLine.innerHTML = `Invoice <b>${v.invoice_number || "-"}</b> validated: <span class="badge ${isPass ? "badge-pass" : "badge-fail"}">${v.status}</span> (${meterEnabled ? "with" : "without"} meter comparison)`;
+      meterDataNote.textContent = v.meter_data_note || "";
+      metricStatus.innerHTML = `<span class="badge ${isPass ? "badge-pass" : "badge-fail"}">${v.status}</span>`;
+      metricScore.textContent = `${v.score}`;
+      metricBand.innerHTML = `<span class="${bandClass}">${v.score_band}</span>`;
+      scoreFill.style.width = `${Math.max(0, Math.min(100, Number(v.score || 0)))}%`;
+      syncMeterColumns(meterEnabled);
+
+      const reasons = v.reasons || [];
+      reasonsList.innerHTML = "";
+      if (!reasons.length) {
+        reasonsList.innerHTML = "<li>No mismatches found.</li>";
+      } else {
+        reasons.slice(0, 6).forEach(r => {
+          const li = document.createElement("li");
+          li.textContent = `${r.code}: ${r.message}`;
+          reasonsList.appendChild(li);
+        });
+      }
+
+      const deductions = v.deductions || [];
+      deductionsList.innerHTML = "";
+      if (!deductions.length) {
+        deductionsList.innerHTML = "<li>No score deductions.</li>";
+      } else {
+        deductions.slice(0, 8).forEach(d => {
+          const li = document.createElement("li");
+          li.textContent = `${d.code}: -${d.penalty} (${d.message})`;
+          deductionsList.appendChild(li);
+        });
+      }
+
+      const summary = v.mpan_summary || {};
+      const summaryRows = Object.entries(summary);
+      mpanSummaryTbody.innerHTML = "";
+      if (!summaryRows.length) {
+        mpanSummaryTbody.innerHTML = `<tr><td colspan="${meterEnabled ? 7 : 6}">No MPAN summary rows.</td></tr>`;
+      } else {
+        summaryRows.forEach(([mpan, row]) => {
+          const status = (row.status || "N/A").toUpperCase();
+          const statusClass = status === "PASS" ? "pill-pass" : status === "FAIL" ? "pill-fail" : "pill-na";
+          const tr = document.createElement("tr");
+          tr.innerHTML = meterEnabled
+            ? `
+              <td>${fmt(mpan)}</td>
+              <td><span class="${statusClass}">${status}</span></td>
+              <td>${fmt(row.reason_count)}</td>
+              <td>${fmt(row.energy_cost_invoice)}</td>
+              <td>${fmt(row.energy_cost_expected_from_contract_usage)}</td>
+              <td>${fmt(row.energy_cost_expected_from_meter)}</td>
+              <td>${fmt(row.score_impact)}</td>
+            `
+            : `
+              <td>${fmt(mpan)}</td>
+              <td><span class="${statusClass}">${status}</span></td>
+              <td>${fmt(row.reason_count)}</td>
+              <td>${fmt(row.energy_cost_invoice)}</td>
+              <td>${fmt(row.energy_cost_expected_from_contract_usage)}</td>
+              <td>${fmt(row.score_impact)}</td>
+            `;
+          mpanSummaryTbody.appendChild(tr);
+        });
+      }
+
+      const comparisons = v.comparisons || [];
+      comparisonTbody.innerHTML = "";
+      if (!comparisons.length) {
+        comparisonTbody.innerHTML = `<tr><td colspan="${meterEnabled ? 6 : 5}">No comparison rows available.</td></tr>`;
+      } else {
+        comparisons.forEach(row => {
+          const tr = document.createElement("tr");
+          const status = (row.status || "N/A").toUpperCase();
+          const statusClass = status === "PASS" ? "pill-pass" : status === "FAIL" ? "pill-fail" : "pill-na";
+          tr.innerHTML = meterEnabled
+            ? `
+              <td>${fmt(row.mpan)}</td>
+              <td>${fmt(row.check)}</td>
+              <td>${fmt(row.invoice_value)}</td>
+              <td>${fmt(row.contract_value)}</td>
+              <td>${fmt(row.meter_value)}</td>
+              <td><span class="${statusClass}">${status}</span></td>
+            `
+            : `
+              <td>${fmt(row.mpan)}</td>
+              <td>${fmt(row.check)}</td>
+              <td>${fmt(row.invoice_value)}</td>
+              <td>${fmt(row.contract_value)}</td>
+              <td><span class="${statusClass}">${status}</span></td>
+            `;
+          comparisonTbody.appendChild(tr);
+        });
+      }
+      renderJSON(v);
+    }
+
+    function addChat(role, text, citations = []) {
+      const p = document.createElement("div");
+      p.className = `msg ${role === "user" ? "user" : "bot"}`;
+      const citeText = citations.length ? `\nCitations: ${citations.join(", ")}` : "";
+      p.textContent = `${role === "user" ? "You" : "Bot"}: ${text}${citeText}`;
+      chatBox.appendChild(p);
+      chatBox.scrollTop = chatBox.scrollHeight;
+    }
+
+    document.getElementById("uploadContractBtn").onclick = async () => {
+      if (!contractFile.files.length) {
+        contractStatus.textContent = "Please select an Excel contract file.";
+        return;
+      }
+      contractStatus.textContent = "Uploading contract...";
+      try {
+        const fd = new FormData();
+        fd.append("file", contractFile.files[0]);
+        const out = await api("/api/contracts/upsert", { method: "POST", body: fd });
+        contractStatus.textContent =
+          `Done: inserted=${out.result.inserted}, updated=${out.result.updated}, skipped=${out.result.skipped}, total=${out.result.total_contracts}`;
+      } catch (e) {
+        contractStatus.textContent = `Error: ${e.message}`;
+      }
+    };
+
+    document.getElementById("loadExistingContractsBtn").onclick = async () => {
+      contractStatus.textContent = "Loading existing contract files from project...";
+      try {
+        const out = await api("/api/contracts/load-defaults", { method: "POST" });
+        contractStatus.textContent =
+          `Loaded existing contracts: files=${out.result.loaded_files.length}, inserted=${out.result.inserted}, updated=${out.result.updated}, skipped=${out.result.skipped}, total=${out.result.total_contracts}`;
+      } catch (e) {
+        contractStatus.textContent = `Error: ${e.message}`;
+      }
+    };
+
+    document.getElementById("validateInvoiceBtn").onclick = async () => {
+      if (!invoiceFile.files.length) {
+        invoiceStatus.textContent = "Please select a PDF invoice.";
+        return;
+      }
+      invoiceStatus.textContent = "Parsing + validating invoice...";
+      try {
+        const fd = new FormData();
+        fd.append("file", invoiceFile.files[0]);
+        const compareMeter = compareMeterToggle.checked;
+        fd.append("compare_meter_data", compareMeter ? "true" : "false");
+        const out = await api(`/api/invoices/validate?compare_meter_data=${compareMeter ? "true" : "false"}`, { method: "POST", body: fd });
+        renderValidation(out);
+        const v = out.validation || {};
+        invoiceNumberInput.value = v.invoice_number || "";
+        invoiceStatus.textContent = `Validation complete for invoice ${v.invoice_number} (${compareMeter ? "with" : "without"} meter data).`;
+      } catch (e) {
+        invoiceStatus.textContent = `Error: ${e.message}`;
+      }
+    };
+
+    compareMeterToggle.onchange = () => {
+      syncMeterColumns(compareMeterToggle.checked);
+    };
+    syncMeterColumns(compareMeterToggle.checked);
+
+    document.getElementById("sendChatBtn").onclick = async () => {
+      const question = chatInput.value.trim();
+      if (!question) return;
+      addChat("user", question);
+      chatInput.value = "";
+      try {
+        const out = await api("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            question,
+            invoice_number: invoiceNumberInput.value.trim() || null,
+          }),
+        });
+        addChat("bot", out.answer, out.citations || []);
+      } catch (e) {
+        addChat("bot", `Error: ${e.message}`);
+      }
+    };
+  </script>
+</body>
+</html>

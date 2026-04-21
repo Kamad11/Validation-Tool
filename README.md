@@ -1,0 +1,91 @@
+# Bill Validator Local POC
+
+This project runs a local chatbot + validation engine for electricity invoices.
+
+## What It Does
+- Option to load existing bundled contract files from the project root.
+- Upload contract Excel files and upsert by `MPAN` (overwrite existing, insert new).
+- Upload invoice PDFs, extract readable fields and line items.
+- Persist full extracted invoice text for grounded Q&A.
+- Validate invoice vs contract with strict exact checks.
+- Validate using invoice date range (supports variable periods like 24, 31, 92 days).
+- Validate energy line costs (invoice GBP vs expected GBP from contract rate x invoice kWh).
+- Invoice rate parsing is UOM-aware (`£/kWh` vs `p/kWh`) and normalized before comparison.
+- Validation uses explicit tolerances:
+  - Rate tolerance: `0.0001 GBP` (`0.01p`)
+  - Money tolerance: `0.02 GBP`
+- Cross-check meter consumption using:
+  - `Meter Data/meters.data` (MPAN-last4 mapping)
+  - `Meter Data/half-hour.data` (day/night tariffs)
+  - `Meter Data/day.data` (single-rate tariffs)
+- For day/night validations, half-hour records are aggregated across the full 24-hour period from the invoice date range.
+- Return `PASS/FAIL`, reason codes, evidence, and weighted score:
+  - Green: >=95
+  - Amber: 80-94
+  - Red: <80
+- Validation now also returns MPAN-level cost summaries:
+  - Invoice energy total
+  - Expected from contract x invoice usage
+  - Expected from contract x meter usage
+- Grounded chat answers only from uploaded/parsed evidence.
+- Chat can answer from the full stored invoice content, with citations to invoice text chunks.
+- UI includes a comparison table for Invoice vs Contract vs Meter values per MPAN/check.
+- Validation can be run with meter comparison enabled/disabled from the UI toggle.
+- Validation output includes a meter-data note indicating whether Wh->kWh normalization was applied.
+
+## Run Locally
+### Option A: Standard local Python (recommended for any machine)
+
+```powershell
+cd "C:\Users\kamad\OneDrive\Desktop\validation tool"
+python -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python app\server.py
+```
+
+Then open:
+- http://127.0.0.1:8000
+
+### Option B: Bundled runtime used in this environment
+
+```powershell
+& 'C:\Users\kamad\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe' app\server.py
+```
+
+Then open:
+- http://127.0.0.1:8000
+
+### Run smoke test
+
+```powershell
+python tests\smoke_test.py
+```
+
+## Optional Environment Variables
+- `HOST` (default `127.0.0.1`)
+- `PORT` (default `8000`)
+
+## API Endpoints
+- `POST /api/contracts/load-defaults` (loads known local contract files in project root)
+- `POST /api/contracts/upsert` (multipart, `file`)
+- `POST /api/invoices/parse` (multipart, `file`)
+- `POST /api/invoices/validate` (multipart, `file` or json with `invoice_number`)
+- `POST /api/chat` (`question`, optional `invoice_number`)
+- `GET /api/state`
+
+## Notes
+- Azure deployment/integration intentionally deferred for local POC.
+- Chat is evidence-grounded retrieval/rules, not open-domain answering.
+
+## Push To GitHub
+
+```powershell
+cd "C:\Users\kamad\OneDrive\Desktop\validation tool"
+git init
+git add .
+git commit -m "Add requirements and local run instructions"
+git branch -M main
+git remote add origin https://github.com/Kamad11/Validation-Tool.git
+git push -u origin main
+```
