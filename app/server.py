@@ -2,6 +2,8 @@ import cgi
 import json
 import os
 import re
+import urllib.error
+import urllib.request
 from dataclasses import dataclass
 from datetime import date, datetime
 from decimal import Decimal, InvalidOperation
@@ -18,6 +20,13 @@ STATIC_DIR = ROOT / "static"
 DATA_STORE_DIR = ROOT / "data_store"
 UPLOAD_DIR = ROOT / "temp_uploads"
 METER_DIR = ROOT / "Meter Data"
+
+# Temporary hardcoded Azure OpenAI settings (user requested).
+AZURE_OPENAI_ENDPOINT_DEFAULT = "https://openai-aliando-pov.openai.azure.com/"
+# Intentionally blank by default; set your key directly or via AZURE_OPENAI_API_KEY env var.
+AZURE_OPENAI_API_KEY_DEFAULT = ""
+AZURE_OPENAI_DEPLOYMENT_DEFAULT = "gpt-5"
+AZURE_OPENAI_API_VERSION_DEFAULT = "2024-10-21"
 
 CONTRACT_STORE = DATA_STORE_DIR / "contracts.json"
 INVOICE_STORE = DATA_STORE_DIR / "invoices.json"
@@ -1143,116 +1152,246 @@ class ChatService:
         if not invoice:
             return {"answer": "I don't have a parsed invoice yet. Please upload and parse an invoice first.", "citations": []}
 
-        if invoice_number:
-            related_validations = [v for v in validations.values() if v.get("invoice_number") == invoice_number]
-        else:
-            related_validations = [v for v in validations.values() if v.get("invoice_number") == invoice.get("invoice_number")]
-
+        invoice_no = invoice.get("invoice_number")
+        related_validations = [v for v in validations.values() if v.get("invoice_number") == invoice_no]
         requested_mpan = ChatService._extract_mpan(question)
 
-        if re.search(r"score|pass|fail|status|validate", question, re.IGNORECASE) and related_validations:
-            latest = sorted(related_validations, key=lambda x: x.get("validated_at", ""), reverse=True)[0]
-            top_reasons = latest.get("reasons", [])[:3]
-            reason_txt = "; ".join(r.get("message", "") for r in top_reasons) if top_reasons else "No mismatches found."
-            return {
-                "answer": f"Validation status is {latest.get('status')} with score {latest.get('score')} ({latest.get('score_band')}). Key reasons: {reason_txt}",
-                "citations": [f"validation:{latest.get('validation_id')}", f"invoice:{latest.get('invoice_number')}"]
-            }
-
-        if requested_mpan:
-            answer = ChatService._answer_mpan_details(invoice, requested_mpan)
-            if answer:
-                return answer
-
-        if re.search(r"\bmpans?\b", question, re.IGNORECASE):
-            mpans = sorted(invoice.get("mpans", {}).keys())
-            if not mpans:
+        if re.search(r"address.*invoice.*contract|invoice.*address.*contract|address mentioned", question, re.IGNORECASE):
+            invoice_address = ChatService._extract_invoice_supply_address(invoice)
+            contract_addresses = ChatService._contract_values_for_invoice_mpans(invoice, contracts, "site_address")
+            if invoice_address or contract_addresses:
+                contract_text = " | ".join(contract_addresses[:5]) if contract_addresses else "Not found in linked contracts."
+                invoice_text = invoice_address or "Not found in parsed invoice text."
                 return {
-                    "answer": f"I could not find MPANs in invoice {invoice.get('invoice_number')}.",
-                    "citations": [f"invoice:{invoice.get('invoice_number')}"]
+                    "answer": (
+                        "Summary:\n"
+                        f"- Invoice address: {invoice_text}\n"
+                        f"- Contract address(es): {contract_text}\n"
+                        "Details:\n"
+                        "- Invoice address is extracted from the parsed PDF text.\n"
+                        "- Contract address values come from contract records linked by invoice MPAN."
+                    ),
+                    "citations": [f"invoice:{invoice_no}"] + [f"contract:mpan:{m}" for m in sorted(invoice.get("mpans", {}).keys())[:5]],
                 }
-            return {
-                "answer": f"Invoice {invoice.get('invoice_number')} has {len(mpans)} MPAN(s): {', '.join(mpans)}",
-                "citations": [f"invoice:{invoice.get('invoice_number')}"] + [f"invoice:{invoice.get('invoice_number')}:mpan:{m}" for m in mpans[:5]]
-            }
+        linked_contracts = {}
+        for mpan in sorted(invoice.get("mpans", {}).keys()):
+            if mpan in contracts:
+                linked_contracts[mpan] = contracts[mpan]
 
-        if re.search(r"period|date range|from date|to date|days", question, re.IGNORECASE):
-            start = invoice.get("invoice_period_start")
-            end = invoice.get("invoice_period_end")
-            days = invoice.get("invoice_period_days")
-            if start and end:
-                return {
-                    "answer": f"Invoice {invoice.get('invoice_number')} covers {start} to {end} ({days} days).",
-                    "citations": [f"invoice:{invoice.get('invoice_number')}"],
-                }
+        latest_validation = None
+        if related_validations:
+            latest_validation = sorted(related_validations, key=lambda x: x.get("validated_at", ""), reverse=True)[0]
 
-        if re.search(r"issue date|invoice date", question, re.IGNORECASE):
-            issue_date = invoice.get("invoice_issue_date")
-            if issue_date:
-                return {
-                    "answer": f"Invoice {invoice.get('invoice_number')} issue date is {issue_date}.",
-                    "citations": [f"invoice:{invoice.get('invoice_number')}"],
-                }
+        full_answer = ChatService._answer_with_azure_full(
+            question=question,
+            invoice=invoice,
+            linked_contracts=linked_contracts,
+            latest_validation=latest_validation,
+        )
+        if full_answer:
+            full_citations = [f"invoice:{invoice_no}"] + [f"contract:mpan:{m}" for m in sorted(linked_contracts.keys())[:10]]
+            if latest_validation:
+                full_citations.append(f"validation:{latest_validation.get('validation_id')}")
+            return {"answer": full_answer, "citations": full_citations}
 
-        if re.search(r"vat registration|vat number", question, re.IGNORECASE):
-            vat_number = ChatService._extract_raw_field(
-                invoice,
-                r"VAT registration number:\s*([0-9 ]{8,20})",
-            )
-            if vat_number:
-                return {
-                    "answer": f"VAT registration number on invoice {invoice.get('invoice_number')}: {vat_number}",
-                    "citations": [f"invoice:{invoice.get('invoice_number')}"],
-                }
+        snippets = ChatService._build_snippets(invoice, contracts, requested_mpan, include_contract=True)
+        if related_validations:
+            latest = latest_validation
+            snippets.append({
+                "source": f"validation:{latest.get('validation_id')}",
+                "text": (
+                    f"Validation status {latest.get('status')} score {latest.get('score')} "
+                    f"band {latest.get('score_band')} for invoice {invoice_no}."
+                ),
+            })
+            for idx, reason in enumerate((latest.get("reasons") or [])[:5], start=1):
+                snippets.append({
+                    "source": f"validation:{latest.get('validation_id')}:reason:{idx}",
+                    "text": f"Validation reason {idx}: {reason.get('code')} {reason.get('message')}",
+                })
 
-        if re.search(r"customer name|customer|account name", question, re.IGNORECASE):
-            names = ChatService._contract_values_for_invoice_mpans(invoice, contracts, "customer_name")
-            if names:
-                return {
-                    "answer": f"Customer name(s) linked to invoice {invoice.get('invoice_number')}: {', '.join(names)}",
-                    "citations": [f"invoice:{invoice.get('invoice_number')}"],
-                }
-
-        if re.search(r"site address|address|site", question, re.IGNORECASE):
-            addresses = ChatService._contract_values_for_invoice_mpans(invoice, contracts, "site_address")
-            if addresses:
-                return {
-                    "answer": f"Site address(es) linked to invoice {invoice.get('invoice_number')}: {' | '.join(addresses[:5])}",
-                    "citations": [f"invoice:{invoice.get('invoice_number')}"],
-                }
-
-        if re.search(r"total to pay|incl\\.? vat|including vat|invoice total|amount due", question, re.IGNORECASE):
-            total = invoice.get("invoice_total_incl_vat")
-            if total is not None:
-                return {
-                    "answer": f"Invoice {invoice.get('invoice_number')} total (incl. VAT) is GBP {round(float(total), 4)}.",
-                    "citations": [f"invoice:{invoice.get('invoice_number')}"],
-                }
-
-        if re.search(r"distribution charges|reactive power", question, re.IGNORECASE):
-            distribution_total = ChatService._extract_raw_field(
-                invoice,
-                r"Total distribution charges for this period\s*(?:=\s*)?[^\d\s]?([0-9,]+\.[0-9]{2})",
-            )
-            if distribution_total:
-                return {
-                    "answer": f"Total distribution charges for invoice {invoice.get('invoice_number')} are GBP {distribution_total}.",
-                    "citations": [f"invoice:{invoice.get('invoice_number')}"],
-                }
-
-        text_answer = ChatService._direct_invoice_text_answer(question, invoice)
-        if text_answer:
-            return text_answer
-
-        include_contract = bool(re.search(r"contract|rate|tariff|standing|validation|meter", question, re.IGNORECASE))
-        snippets = ChatService._build_snippets(invoice, contracts, requested_mpan, include_contract=include_contract)
         ranked = ChatService._rank(question, snippets)
-        if not ranked or ranked[0]["score"] < 2:
+        top = ranked[:8] if ranked else snippets[:8]
+        if not top:
             return {"answer": "Insufficient evidence in the uploaded invoice/contract/meter data to answer that reliably.", "citations": []}
 
-        top = ranked[:3]
-        answer_text = "Based on uploaded evidence: " + " | ".join(ChatService._compact_snippet(item["text"]) for item in top)
-        return {"answer": answer_text, "citations": [item["source"] for item in top]}
+        citations = [item["source"] for item in top]
+        azure_answer = ChatService._answer_with_azure(question, top)
+        if azure_answer:
+            return {"answer": azure_answer, "citations": citations}
+        return {
+            "answer": (
+                "Unable to get a response from GPT-5 right now. "
+                "Please check Azure OpenAI connectivity/configuration and try again."
+            ),
+            "citations": citations,
+        }
+
+    @staticmethod
+    def _answer_with_azure_full(
+        question: str,
+        invoice: Dict[str, Any],
+        linked_contracts: Dict[str, Any],
+        latest_validation: Optional[Dict[str, Any]],
+    ) -> Optional[str]:
+        endpoint = (os.environ.get("AZURE_OPENAI_ENDPOINT") or AZURE_OPENAI_ENDPOINT_DEFAULT).strip().rstrip("/")
+        api_key = (os.environ.get("AZURE_OPENAI_API_KEY") or AZURE_OPENAI_API_KEY_DEFAULT).strip()
+        deployment = AZURE_OPENAI_DEPLOYMENT_DEFAULT
+        api_version = (os.environ.get("AZURE_OPENAI_API_VERSION") or AZURE_OPENAI_API_VERSION_DEFAULT).strip()
+        if not endpoint or not api_key or not deployment:
+            return None
+
+        invoice_text = str(invoice.get("raw_text_full") or invoice.get("raw_text_excerpt") or "")
+        invoice_text = invoice_text[:120000]
+        invoice_structured = {
+            "invoice_number": invoice.get("invoice_number"),
+            "invoice_issue_date": invoice.get("invoice_issue_date"),
+            "invoice_period_start": invoice.get("invoice_period_start"),
+            "invoice_period_end": invoice.get("invoice_period_end"),
+            "invoice_period_days": invoice.get("invoice_period_days"),
+            "invoice_total_incl_vat": invoice.get("invoice_total_incl_vat"),
+            "mpans": invoice.get("mpans"),
+            "extracted_fields": invoice.get("extracted_fields"),
+            "extracted_numeric_values": invoice.get("extracted_numeric_values"),
+            "extracted_table_rows": invoice.get("extracted_table_rows"),
+            "source_file": invoice.get("source_file"),
+        }
+        contracts_payload = linked_contracts
+        validation_payload = latest_validation or {}
+
+        system_prompt = (
+            "You are an invoice-validation assistant using GPT-5. "
+            "You must answer ONLY from provided evidence (invoice full text, parsed invoice data, contract records, validation summary). "
+            "If insufficient evidence, say exactly: "
+            "'Insufficient evidence in the uploaded invoice/contract/meter data to answer that reliably.' "
+            "Format output exactly as:\n"
+            "Summary:\n"
+            "- <short answer>\n"
+            "Details:\n"
+            "- <key point 1>\n"
+            "- <key point 2>\n"
+            "- <key point 3 if needed>"
+        )
+        user_prompt = (
+            f"Question:\n{question}\n\n"
+            f"Parsed invoice JSON:\n{json.dumps(invoice_structured, ensure_ascii=True)}\n\n"
+            f"Linked contract JSON by MPAN:\n{json.dumps(contracts_payload, ensure_ascii=True)}\n\n"
+            f"Latest validation JSON:\n{json.dumps(validation_payload, ensure_ascii=True)}\n\n"
+            f"Full invoice PDF extracted text:\n{invoice_text}\n"
+        )
+        payload = {
+            "messages": [
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
+            ],
+            "max_completion_tokens": 1400,
+        }
+        url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
+        req = urllib.request.Request(
+            url=url,
+            data=json.dumps(payload).encode("utf-8"),
+            headers={"Content-Type": "application/json", "api-key": api_key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            choices = body.get("choices") or []
+            if not choices:
+                return None
+            msg = (choices[0].get("message") or {}).get("content")
+            return msg.strip() if isinstance(msg, str) and msg.strip() else None
+        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
+            return None
+
+    @staticmethod
+    def _extract_invoice_supply_address(invoice: Dict[str, Any]) -> Optional[str]:
+        text = " ".join(str(invoice.get("raw_text_full") or invoice.get("raw_text_excerpt") or "").split())
+        if not text:
+            return None
+        patterns = [
+            r"Supply address:\s*(.*?)\s*Account number\s*/\s*Invoice Number",
+            r"Supply Address\s*(.*?)\s*Page\s+\d+\s+of\s+\d+",
+            r"Supply address:\s*(.*?)\s*Invoice issue date",
+        ]
+        for pat in patterns:
+            m = re.search(pat, text, re.IGNORECASE)
+            if not m:
+                continue
+            addr = " ".join(m.group(1).split())
+            if addr:
+                return addr
+        return None
+
+    @staticmethod
+    def _answer_with_azure(question: str, snippets: List[Dict[str, str]]) -> Optional[str]:
+        endpoint = (os.environ.get("AZURE_OPENAI_ENDPOINT") or AZURE_OPENAI_ENDPOINT_DEFAULT).strip().rstrip("/")
+        api_key = (os.environ.get("AZURE_OPENAI_API_KEY") or AZURE_OPENAI_API_KEY_DEFAULT).strip()
+        deployment = AZURE_OPENAI_DEPLOYMENT_DEFAULT
+        api_version = (os.environ.get("AZURE_OPENAI_API_VERSION") or AZURE_OPENAI_API_VERSION_DEFAULT).strip()
+        if not endpoint or not api_key or not deployment:
+            return None
+
+        system_prompt = (
+            "You are an invoice-validation assistant using GPT-5. Answer ONLY from the provided evidence snippets. "
+            "If the evidence is insufficient or ambiguous, say exactly: "
+            "'Insufficient evidence in the uploaded invoice/contract/meter data to answer that reliably.' "
+            "Use BOTH invoice evidence and contract evidence whenever relevant. "
+            "Format output exactly as:\n"
+            "Summary:\n"
+            "- <short answer>\n"
+            "Details:\n"
+            "- <key point 1>\n"
+            "- <key point 2>\n"
+            "- <key point 3 if needed>"
+        )
+        attempts = [
+            {"snippet_count": 8, "max_completion_tokens": 1200},
+            {"snippet_count": 4, "max_completion_tokens": 800},
+        ]
+        url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
+        for cfg in attempts:
+            context_lines = []
+            for item in snippets[: cfg["snippet_count"]]:
+                source = item.get("source") or "unknown"
+                text = ChatService._compact_snippet(item.get("text") or "", max_len=500)
+                context_lines.append(f"[{source}] {text}")
+            context_block = "\n".join(context_lines)
+            if not context_block:
+                continue
+            user_prompt = (
+                f"Question:\n{question}\n\n"
+                f"Evidence snippets:\n{context_block}\n\n"
+                "Provide a direct answer grounded only in this evidence."
+            )
+            payload = {
+                "messages": [
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                "max_completion_tokens": cfg["max_completion_tokens"],
+            }
+            req = urllib.request.Request(
+                url=url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={
+                    "Content-Type": "application/json",
+                    "api-key": api_key,
+                },
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=45) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                choices = body.get("choices") or []
+                if not choices:
+                    continue
+                msg = (choices[0].get("message") or {}).get("content")
+                if isinstance(msg, str) and msg.strip():
+                    return msg.strip()
+            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
+                continue
+        return None
 
     @staticmethod
     def _answer_mpan_details(invoice: Dict[str, Any], mpan: str) -> Optional[Dict[str, Any]]:
@@ -1321,6 +1460,12 @@ class ChatService:
                     f"{invoice.get('invoice_period_end')} ({invoice.get('invoice_period_days')} days) total {invoice.get('invoice_total_incl_vat')}"
                 ),
             })
+            snippets.append({
+                "source": f"invoice:{invoice.get('invoice_number')}:source-file",
+                "text": (
+                    f"Parsed from PDF source file {invoice.get('source_file')} at {invoice.get('parsed_at')}."
+                ),
+            })
 
             mpan_items = list(invoice.get("mpans", {}).items())
             if requested_mpan:
@@ -1333,6 +1478,15 @@ class ChatService:
                     "source": f"invoice:{invoice.get('invoice_number')}:mpan:{mpan}",
                     "text": f"MPAN {mpan} labels {labels}; total usage {round(total_kwh, 4)} kWh.",
                 })
+                for idx, row in enumerate(detail.get("energy_rates", [])[:8], start=1):
+                    snippets.append({
+                        "source": f"invoice:{invoice.get('invoice_number')}:mpan:{mpan}:energy:{idx}",
+                        "text": (
+                            f"MPAN {mpan} energy row {idx}: label {row.get('label')} units {row.get('units_kwh')} kWh "
+                            f"unit rate {row.get('unit_rate')} GBP/kWh (raw {row.get('unit_rate_raw')} {row.get('unit_rate_uom')}) "
+                            f"cost {row.get('cost')} GBP."
+                        ),
+                    })
                 standing = detail.get("standing_charge")
                 if standing:
                     snippets.append({
@@ -1342,6 +1496,36 @@ class ChatService:
                             f"{standing.get('days')} days cost {standing.get('cost')}."
                         ),
                     })
+
+            extracted_fields = invoice.get("extracted_fields") or []
+            for item in extracted_fields[:40]:
+                snippets.append({
+                    "source": f"invoice:{invoice.get('invoice_number')}:field:{item.get('field')}",
+                    "text": (
+                        f"Invoice field {item.get('field')}: {item.get('value')} "
+                        f"(page {item.get('page')}, line {item.get('line')})."
+                    ),
+                })
+
+            numeric_values = invoice.get("extracted_numeric_values") or []
+            for item in numeric_values[:80]:
+                snippets.append({
+                    "source": f"invoice:{invoice.get('invoice_number')}:numeric:p{item.get('page')}-l{item.get('line')}",
+                    "text": (
+                        f"Numeric token {item.get('token')} parsed as {item.get('numeric_value')} "
+                        f"from invoice context: {item.get('context')}"
+                    ),
+                })
+
+            table_rows = invoice.get("extracted_table_rows") or []
+            for idx, row in enumerate(table_rows[:60], start=1):
+                snippets.append({
+                    "source": f"invoice:{invoice.get('invoice_number')}:table-row:{idx}",
+                    "text": (
+                        f"Invoice table-like row (page {row.get('page')}, line {row.get('line')}): "
+                        f"{row.get('row_text')} Numbers: {', '.join(str(n) for n in (row.get('numbers') or []))}"
+                    ),
+                })
 
             snippets.extend(ChatService._invoice_text_snippets(invoice))
 
@@ -1356,10 +1540,21 @@ class ChatService:
                     snippets.append({
                         "source": f"contract:{contract.get('source_file')}:mpan:{mpan}",
                         "text": (
-                            f"Contract MPAN {mpan} tariff {contract.get('tariff_type')} standing {contract.get('standing_charge_rate')} "
-                            f"day {contract.get('day_rate')} night {contract.get('night_rate')} single {contract.get('single_rate')}"
+                            f"Contract source {contract.get('source_file')} MPAN {mpan} customer {contract.get('customer_name')} "
+                            f"site {contract.get('site_address')} meter type {contract.get('meter_type')} "
+                            f"tariff {contract.get('tariff_type')} standing {contract.get('standing_charge_rate')} "
+                            f"day {contract.get('day_rate')} night {contract.get('night_rate')} single {contract.get('single_rate')} "
+                            f"effective {contract.get('effective_start')} to {contract.get('effective_end')}"
                         ),
                     })
+                    for idx, comp in enumerate(contract.get("rate_components", [])[:12], start=1):
+                        snippets.append({
+                            "source": f"contract:{contract.get('source_file')}:mpan:{mpan}:rate:{idx}",
+                            "text": (
+                                f"Contract MPAN {mpan} rate component {idx}: description {comp.get('description')} "
+                                f"value {comp.get('value')} GBP-normalized (raw {comp.get('value_raw')} {comp.get('uom')})."
+                            ),
+                        })
         return snippets
 
     @staticmethod

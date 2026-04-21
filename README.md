@@ -65,6 +65,18 @@ python tests\smoke_test.py
 ## Optional Environment Variables
 - `HOST` (default `127.0.0.1`)
 - `PORT` (default `8000`)
+- `AZURE_OPENAI_ENDPOINT` (for grounded chat completion)
+- `AZURE_OPENAI_API_KEY` (for grounded chat completion)
+- `AZURE_OPENAI_DEPLOYMENT` (Azure deployment name, for example `gpt-5`)
+- `AZURE_OPENAI_API_VERSION` (default in code: `2024-10-21`)
+
+Example (PowerShell, current session only):
+```powershell
+$env:AZURE_OPENAI_ENDPOINT = "https://<your-resource>.openai.azure.com/"
+$env:AZURE_OPENAI_API_KEY = "<your-api-key>"
+$env:AZURE_OPENAI_DEPLOYMENT = "gpt-5"
+$env:AZURE_OPENAI_API_VERSION = "2024-10-21"
+```
 
 ## API Endpoints
 - `POST /api/contracts/load-defaults` (loads known local contract files in project root)

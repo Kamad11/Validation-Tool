@@ -69,6 +69,14 @@
     .msg { margin: 0 0 10px; line-height: 1.35; }
     .user { color: #0f172a; }
     .bot { color: #134e4a; }
+    .msg-head { font-weight: 700; margin-bottom: 2px; }
+    .msg-body { white-space: pre-wrap; }
+    .msg-citations {
+      margin-top: 4px;
+      font-size: 12px;
+      color: #475569;
+      white-space: pre-wrap;
+    }
     .mono {
       white-space: pre-wrap;
       font-family: Consolas, "SFMono-Regular", Menlo, monospace;
@@ -461,8 +469,23 @@
     function addChat(role, text, citations = []) {
       const p = document.createElement("div");
       p.className = `msg ${role === "user" ? "user" : "bot"}`;
-      const citeText = citations.length ? `\nCitations: ${citations.join(", ")}` : "";
-      p.textContent = `${role === "user" ? "You" : "Bot"}: ${text}${citeText}`;
+      const head = document.createElement("div");
+      head.className = "msg-head";
+      head.textContent = role === "user" ? "You" : "Bot";
+
+      const body = document.createElement("div");
+      body.className = "msg-body";
+      body.textContent = text || "";
+
+      p.appendChild(head);
+      p.appendChild(body);
+
+      if (citations.length) {
+        const cite = document.createElement("div");
+        cite.className = "msg-citations";
+        cite.textContent = `Citations:\n- ${citations.join("\n- ")}`;
+        p.appendChild(cite);
+      }
       chatBox.appendChild(p);
       chatBox.scrollTop = chatBox.scrollHeight;
     }
