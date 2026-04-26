@@ -5,7 +5,7 @@ import re
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -307,6 +307,8 @@ class InvoiceService:
         key_value_fields = InvoiceService._extract_key_value_fields(page_texts)
         numeric_values = InvoiceService._extract_numeric_values(page_texts)
         table_rows = InvoiceService._extract_table_like_rows(page_texts)
+        supply_address = InvoiceService._extract_supply_address_from_text(text)
+        billing_address = InvoiceService._extract_billing_address_from_first_page(page_texts[0] if page_texts else "")
 
         mpan_entries: Dict[str, Dict[str, Any]] = {}
         for mpan in mpans:
@@ -323,6 +325,8 @@ class InvoiceService:
             "invoice_period_end": period_end_raw,
             "invoice_period_days": period_days,
             "invoice_total_incl_vat": parse_money(total_match.group(1)) if total_match else None,
+            "invoice_supply_address": supply_address,
+            "invoice_billing_address": billing_address,
             "mpans": mpan_entries,
             "extracted_fields": key_value_fields,
             "extracted_numeric_values": numeric_values,
@@ -508,6 +512,54 @@ class InvoiceService:
                 })
         return rows
 
+    @staticmethod
+    def _extract_supply_address_from_text(text: str) -> Optional[str]:
+        flat = " ".join(str(text or "").split())
+        if not flat:
+            return None
+        patterns = [
+            r"Supply address:\s*(.*?)\s*Account number\s*/\s*Invoice Number",
+            r"Supply Address\s*(.*?)\s*Page\s+\d+\s+of\s+\d+",
+            r"Supply address:\s*(.*?)\s*Invoice issue date",
+        ]
+        for pat in patterns:
+            m = re.search(pat, flat, re.IGNORECASE)
+            if not m:
+                continue
+            addr = " ".join(m.group(1).split())
+            if addr:
+                return addr
+        return None
+
+    @staticmethod
+    def _extract_billing_address_from_first_page(first_page_text: str) -> Optional[str]:
+        if not first_page_text:
+            return None
+        lines = [ln.strip() for ln in str(first_page_text).splitlines() if ln and ln.strip()]
+        if not lines:
+            return None
+        start_idx = None
+        for i, line in enumerate(lines):
+            low = line.lower()
+            if "invoice summary" in low:
+                break
+            if re.search(r"\bltd\b|\blimited\b", low):
+                if not re.search(r"edf|invoice|page\s+\d+|vat registration", low):
+                    start_idx = i
+                    break
+        if start_idx is None:
+            return None
+        collected = []
+        for line in lines[start_idx:start_idx + 8]:
+            low = line.lower()
+            if "invoice summary" in low or "account balance" in low or "supply charges" in low:
+                break
+            if re.search(r"^page\s+\d+\s+of\s+\d+", low):
+                break
+            collected.append(line)
+        addr = " | ".join(collected).strip(" |")
+        return addr if addr else None
+
 
 @dataclass
 class MeterSnapshot:
@@ -603,10 +655,12 @@ class MeterService:
 class ValidationService:
     RATE_TOLERANCE_GBP = 0.0001  # 0.01 pence
     MONEY_TOLERANCE_GBP = 0.02   # 2 pence
+    METER_TOLERANCE_PCT_DEFAULT = 2.0
     PENALTIES = {
         "CONTRACT_NOT_FOUND": 50,
         "METER_MAPPING_NOT_FOUND": 10,
         "METER_DATA_UNAVAILABLE": 8,
+        "METER_DATA_PREDICTED": 0,
         "RATE_MISMATCH": 20,
         "STANDING_RATE_MISMATCH": 10,
         "STANDING_DAYS_MISMATCH": 8,
@@ -619,13 +673,35 @@ class ValidationService:
     }
 
     @staticmethod
-    def validate_invoice_record(invoice: Dict[str, Any], compare_meter_data: bool = True) -> Dict[str, Any]:
+    def validate_invoice_record(
+        invoice: Dict[str, Any],
+        compare_meter_data: bool = True,
+        meter_tolerance_pct: Optional[float] = None,
+    ) -> Dict[str, Any]:
         contracts = load_json(CONTRACT_STORE, {})
         meter = MeterService.load() if compare_meter_data else None
         reasons: List[Dict[str, Any]] = []
         evidence: List[Dict[str, Any]] = []
         comparisons: List[Dict[str, Any]] = []
+        contract_invoice_comparisons: List[Dict[str, Any]] = []
+        invoice_meter_comparisons: List[Dict[str, Any]] = []
         mpan_summary: Dict[str, Dict[str, Any]] = {}
+        meter_tolerance_pct_used = ValidationService.METER_TOLERANCE_PCT_DEFAULT
+        if meter_tolerance_pct is not None:
+            try:
+                parsed_meter_tol = float(meter_tolerance_pct)
+                if parsed_meter_tol >= 0:
+                    meter_tolerance_pct_used = parsed_meter_tol
+            except (TypeError, ValueError):
+                meter_tolerance_pct_used = ValidationService.METER_TOLERANCE_PCT_DEFAULT
+
+        def _push_comparison(scope: str, row: Dict[str, Any]) -> None:
+            scoped = {**row, "comparison_scope": scope}
+            comparisons.append(scoped)
+            if scope == "invoice_meter":
+                invoice_meter_comparisons.append(scoped)
+            else:
+                contract_invoice_comparisons.append(scoped)
 
         period_start = parse_invoice_date(invoice.get("invoice_period_start") or "")
         period_end = parse_invoice_date(invoice.get("invoice_period_end") or "")
@@ -667,7 +743,7 @@ class ValidationService:
                     contract_standing,
                     ValidationService.RATE_TOLERANCE_GBP,
                 )
-                comparisons.append({
+                _push_comparison("contract_invoice", {
                     "mpan": mpan,
                     "check": "Standing Unit Rate (GBP/day)",
                     "invoice_value": invoice_standing.get("unit_rate"),
@@ -691,7 +767,7 @@ class ValidationService:
                         "message": f"Standing days mismatch for MPAN {mpan}: invoice={inv_days} invoice_period_days={period_days}",
                     })
                 if period_days is not None and inv_days is not None:
-                    comparisons.append({
+                    _push_comparison("contract_invoice", {
                         "mpan": mpan,
                         "check": "Standing Days",
                         "invoice_value": inv_days,
@@ -707,7 +783,7 @@ class ValidationService:
                         expected_cost,
                         ValidationService.MONEY_TOLERANCE_GBP,
                     )
-                    comparisons.append({
+                    _push_comparison("contract_invoice", {
                         "mpan": mpan,
                         "check": "Standing Cost (GBP)",
                         "invoice_value": inv_cost,
@@ -746,7 +822,7 @@ class ValidationService:
                             "mpan": mpan,
                             "message": f"Contract has no matching rate for invoice label '{item.get('label')}' on MPAN {mpan}.",
                         })
-                        comparisons.append({
+                        _push_comparison("contract_invoice", {
                             "mpan": mpan,
                             "check": f"Energy Unit Rate ({item.get('label')})",
                             "invoice_value": inv_rate,
@@ -760,7 +836,7 @@ class ValidationService:
                         expected,
                         ValidationService.RATE_TOLERANCE_GBP,
                     )
-                    comparisons.append({
+                    _push_comparison("contract_invoice", {
                         "mpan": mpan,
                         "check": f"Energy Unit Rate ({item.get('label')})",
                         "invoice_value": inv_rate,
@@ -786,7 +862,7 @@ class ValidationService:
                             expected_energy_cost,
                             ValidationService.MONEY_TOLERANCE_GBP,
                         )
-                        comparisons.append({
+                        _push_comparison("contract_invoice", {
                             "mpan": mpan,
                             "check": f"Energy Cost ({item.get('label')})",
                             "invoice_value": inv_cost,
@@ -807,7 +883,7 @@ class ValidationService:
                         expected_energy_cost_from_contract_usage,
                         ValidationService.MONEY_TOLERANCE_GBP,
                     )
-                    comparisons.append({
+                    _push_comparison("contract_invoice", {
                         "mpan": mpan,
                         "check": "Energy Cost Total (Invoice usage x Contract rates)",
                         "invoice_value": round(invoice_energy_cost_total, 4),
@@ -825,11 +901,13 @@ class ValidationService:
                     meter=meter,
                     period_start=period_start,
                     period_end=period_end,
+                    meter_tolerance_pct=meter_tolerance_pct_used,
                 )
                 if meter_reason:
                     reasons.extend(meter_reason)
                 evidence.extend(meter_ev)
-                comparisons.extend(meter_cmp)
+                for row in meter_cmp:
+                    _push_comparison("invoice_meter", row)
             elif compare_meter_data:
                 reasons.append({
                     "code": "METER_DATA_UNAVAILABLE",
@@ -840,12 +918,12 @@ class ValidationService:
 
             if meter_rollup and meter_rollup.get("expected_energy_cost_from_meter") is not None and energy_cost_rows > 0:
                 meter_expected_cost = meter_rollup["expected_energy_cost_from_meter"]
-                meter_cost_ok = ValidationService._within_tolerance(
+                meter_cost_ok = ValidationService._within_meter_tolerance(
                     invoice_energy_cost_total,
                     meter_expected_cost,
-                    ValidationService.MONEY_TOLERANCE_GBP,
+                    meter_tolerance_pct_used,
                 )
-                comparisons.append({
+                _push_comparison("invoice_meter", {
                     "mpan": mpan,
                     "check": "Energy Cost Total (Meter-derived expected cost)",
                     "invoice_value": round(invoice_energy_cost_total, 4),
@@ -894,12 +972,23 @@ class ValidationService:
                 )
             else:
                 meter_note = "Meter values used as kWh without Wh-to-kWh normalization."
+            predicted_count = len([r for r in reasons if r.get("code") == "METER_DATA_PREDICTED"])
+            unavailable_count = len([r for r in reasons if r.get("code") == "METER_DATA_UNAVAILABLE"])
+            if predicted_count > 0:
+                meter_note += f" Predicted meter values were used for {predicted_count} MPAN(s) due to insufficient direct meter data."
+            elif unavailable_count > 0:
+                meter_note += f" Not enough meter data for direct comparison/prediction for {unavailable_count} MPAN(s)."
         result = {
             "validation_id": f"VAL-{invoice.get('invoice_number', 'unknown')}-{int(datetime.utcnow().timestamp())}",
             "invoice_number": invoice.get("invoice_number"),
             "meter_comparison_enabled": compare_meter_data,
             "meter_data_note": meter_note,
             "meter_data_normalization": meter_normalization,
+            "tolerances_used": {
+                "rate_tolerance_gbp": ValidationService.RATE_TOLERANCE_GBP,
+                "money_tolerance_gbp": ValidationService.MONEY_TOLERANCE_GBP,
+                "meter_tolerance_pct": meter_tolerance_pct_used,
+            },
             "status": status,
             "score": score,
             "score_band": ValidationService._score_band(score),
@@ -908,6 +997,8 @@ class ValidationService:
             "reasons": reasons,
             "evidence": evidence,
             "comparisons": comparisons,
+            "contract_invoice_comparisons": contract_invoice_comparisons,
+            "invoice_meter_comparisons": invoice_meter_comparisons,
             "validated_at": utc_now_iso(),
         }
 
@@ -938,6 +1029,7 @@ class ValidationService:
         meter: MeterSnapshot,
         period_start: date,
         period_end: date,
+        meter_tolerance_pct: float,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]], Optional[Dict[str, Any]]]:
         reasons: List[Dict[str, Any]] = []
         evidence: List[Dict[str, Any]] = []
@@ -964,6 +1056,7 @@ class ValidationService:
 
         tariff_type = contract.get("tariff_type", "single")
         invoice_day, invoice_night, invoice_total = ValidationService._split_invoice_usage(mpan_invoice.get("energy_rates", []))
+        invoice_days = (period_end - period_start).days + 1 if period_end >= period_start else 0
         meter_rollup: Optional[Dict[str, Any]] = None
 
         if tariff_type == "day_night":
@@ -983,6 +1076,7 @@ class ValidationService:
                 else:
                     meter_night_usage += kwh
 
+            invoice_total_day_night = invoice_day + invoice_night
             if total_usage_24h <= 0.0:
                 reasons.append({
                     "code": "METER_DATA_UNAVAILABLE",
@@ -990,8 +1084,54 @@ class ValidationService:
                     "mpan": mpan,
                     "message": f"No half-hour meter data in period for MPAN {mpan}.",
                 })
+                prediction = ValidationService._predict_meter_usage(
+                    meter=meter,
+                    meter_ids=meter_ids,
+                    period_start=period_start,
+                    invoice_days=invoice_days,
+                    tariff_type="day_night",
+                )
+                if prediction:
+                    pred_total = prediction.get("predicted_total_kwh") or 0.0
+                    pred_day = prediction.get("predicted_day_kwh")
+                    pred_night = prediction.get("predicted_night_kwh")
+                    predicted_expected_cost = None
+                    if contract.get("day_rate") is not None and contract.get("night_rate") is not None and pred_day is not None and pred_night is not None:
+                        predicted_expected_cost = (pred_day * float(contract["day_rate"])) + (pred_night * float(contract["night_rate"]))
+                    comparisons.append({
+                        "mpan": mpan,
+                        "check": "Consumption kWh (Predicted Total - insufficient direct meter data)",
+                        "invoice_value": round(invoice_total_day_night, 4),
+                        "contract_value": None,
+                        "meter_value": round(pred_total, 4),
+                        "status": "PREDICTED",
+                    })
+                    reasons.append({
+                        "code": "METER_DATA_PREDICTED",
+                        "severity": "info",
+                        "mpan": mpan,
+                        "message": (
+                            f"Direct meter data was insufficient for MPAN {mpan}; comparison uses predicted meter values "
+                            f"from historical data window {prediction.get('history_window_days')} day(s)."
+                        ),
+                    })
+                    meter_rollup = {
+                        "meter_day_kwh": pred_day,
+                        "meter_night_kwh": pred_night,
+                        "meter_total_kwh": pred_total,
+                        "expected_energy_cost_from_meter": predicted_expected_cost,
+                        "predicted": True,
+                    }
+                else:
+                    comparisons.append({
+                        "mpan": mpan,
+                        "check": "Consumption kWh (Meter data unavailable)",
+                        "invoice_value": round(invoice_total_day_night, 4),
+                        "contract_value": None,
+                        "meter_value": None,
+                        "status": "N/A",
+                    })
             else:
-                invoice_total_day_night = invoice_day + invoice_night
                 evidence.append({
                     "source": "meter:half-hour.data",
                     "mpan": mpan,
@@ -1000,7 +1140,7 @@ class ValidationService:
                         f"(day={round(meter_day_usage, 4)}, night={round(meter_night_usage, 4)}) for day/night tariff."
                     ),
                 })
-                if invoice_total_day_night > 0 and not approx_equal_strict(invoice_total_day_night, total_usage_24h, places=4):
+                if invoice_total_day_night > 0 and not ValidationService._within_meter_tolerance(invoice_total_day_night, total_usage_24h, meter_tolerance_pct):
                     reasons.append({
                         "code": "USAGE_MISMATCH",
                         "severity": "fail",
@@ -1013,7 +1153,7 @@ class ValidationService:
                     "invoice_value": round(invoice_total_day_night, 4),
                     "contract_value": None,
                     "meter_value": round(total_usage_24h, 4),
-                    "status": "PASS" if approx_equal_strict(invoice_total_day_night, total_usage_24h, places=4) else "FAIL",
+                    "status": "PASS" if ValidationService._within_meter_tolerance(invoice_total_day_night, total_usage_24h, meter_tolerance_pct) else "FAIL",
                 })
                 comparisons.append({
                     "mpan": mpan,
@@ -1021,7 +1161,7 @@ class ValidationService:
                     "invoice_value": round(invoice_day, 4),
                     "contract_value": None,
                     "meter_value": round(meter_day_usage, 4),
-                    "status": "PASS" if approx_equal_strict(invoice_day, meter_day_usage, places=4) else "FAIL",
+                    "status": "PASS" if ValidationService._within_meter_tolerance(invoice_day, meter_day_usage, meter_tolerance_pct) else "FAIL",
                 })
                 comparisons.append({
                     "mpan": mpan,
@@ -1029,7 +1169,7 @@ class ValidationService:
                     "invoice_value": round(invoice_night, 4),
                     "contract_value": None,
                     "meter_value": round(meter_night_usage, 4),
-                    "status": "PASS" if approx_equal_strict(invoice_night, meter_night_usage, places=4) else "FAIL",
+                    "status": "PASS" if ValidationService._within_meter_tolerance(invoice_night, meter_night_usage, meter_tolerance_pct) else "FAIL",
                 })
                 expected_from_meter = None
                 if contract.get("day_rate") is not None and contract.get("night_rate") is not None:
@@ -1055,13 +1195,58 @@ class ValidationService:
                     "mpan": mpan,
                     "message": f"No daily meter data in period for MPAN {mpan}.",
                 })
+                prediction = ValidationService._predict_meter_usage(
+                    meter=meter,
+                    meter_ids=meter_ids,
+                    period_start=period_start,
+                    invoice_days=invoice_days,
+                    tariff_type="single",
+                )
+                if prediction:
+                    pred_total = prediction.get("predicted_total_kwh") or 0.0
+                    predicted_expected_cost = None
+                    if contract.get("single_rate") is not None:
+                        predicted_expected_cost = pred_total * float(contract["single_rate"])
+                    comparisons.append({
+                        "mpan": mpan,
+                        "check": "Consumption kWh (Predicted Total - insufficient direct meter data)",
+                        "invoice_value": round(invoice_total, 4),
+                        "contract_value": None,
+                        "meter_value": round(pred_total, 4),
+                        "status": "PREDICTED",
+                    })
+                    reasons.append({
+                        "code": "METER_DATA_PREDICTED",
+                        "severity": "info",
+                        "mpan": mpan,
+                        "message": (
+                            f"Direct meter data was insufficient for MPAN {mpan}; comparison uses predicted meter values "
+                            f"from historical data window {prediction.get('history_window_days')} day(s)."
+                        ),
+                    })
+                    meter_rollup = {
+                        "meter_day_kwh": None,
+                        "meter_night_kwh": None,
+                        "meter_total_kwh": pred_total,
+                        "expected_energy_cost_from_meter": predicted_expected_cost,
+                        "predicted": True,
+                    }
+                else:
+                    comparisons.append({
+                        "mpan": mpan,
+                        "check": "Consumption kWh (Meter data unavailable)",
+                        "invoice_value": round(invoice_total, 4),
+                        "contract_value": None,
+                        "meter_value": None,
+                        "status": "N/A",
+                    })
             else:
                 evidence.append({
                     "source": "meter:day.data",
                     "mpan": mpan,
                     "details": f"Aggregated meter kWh Total={round(total_usage, 4)} for single-rate tariff.",
                 })
-                if invoice_total > 0 and not approx_equal_strict(invoice_total, total_usage, places=4):
+                if invoice_total > 0 and not ValidationService._within_meter_tolerance(invoice_total, total_usage, meter_tolerance_pct):
                     reasons.append({
                         "code": "USAGE_MISMATCH",
                         "severity": "fail",
@@ -1074,7 +1259,7 @@ class ValidationService:
                     "invoice_value": round(invoice_total, 4),
                     "contract_value": None,
                     "meter_value": round(total_usage, 4),
-                    "status": "PASS" if approx_equal_strict(invoice_total, total_usage, places=4) else "FAIL",
+                    "status": "PASS" if ValidationService._within_meter_tolerance(invoice_total, total_usage, meter_tolerance_pct) else "FAIL",
                 })
                 expected_from_meter = None
                 if contract.get("single_rate") is not None:
@@ -1108,6 +1293,78 @@ class ValidationService:
         if a is None or b is None:
             return False
         return abs(float(a) - float(b)) <= float(tolerance)
+
+    @staticmethod
+    def _within_meter_tolerance(a: Optional[float], b: Optional[float], tolerance_pct: float) -> bool:
+        if a is None or b is None:
+            return False
+        a_val = float(a)
+        b_val = float(b)
+        baseline = max(abs(a_val), abs(b_val), 1.0)
+        allowed = baseline * (float(tolerance_pct) / 100.0)
+        return abs(a_val - b_val) <= allowed
+
+    @staticmethod
+    def _predict_meter_usage(
+        meter: MeterSnapshot,
+        meter_ids: List[str],
+        period_start: date,
+        invoice_days: int,
+        tariff_type: str,
+        history_window_days: int = 30,
+    ) -> Optional[Dict[str, Any]]:
+        if invoice_days <= 0:
+            return None
+        history_start = period_start - timedelta(days=history_window_days)
+        history_end = period_start - timedelta(days=1)
+        if history_end < history_start:
+            return None
+
+        if tariff_type == "day_night":
+            per_day: Dict[date, Dict[str, float]] = {}
+            for meter_id, dt, value in meter.half_hour_rows:
+                if meter_id not in meter_ids:
+                    continue
+                d = dt.date()
+                if d < history_start or d > history_end:
+                    continue
+                bucket = per_day.setdefault(d, {"day": 0.0, "night": 0.0})
+                if 7 <= dt.hour < 23:
+                    bucket["day"] += value
+                else:
+                    bucket["night"] += value
+            if len(per_day) < 3:
+                return None
+            avg_day = sum(v["day"] for v in per_day.values()) / len(per_day)
+            avg_night = sum(v["night"] for v in per_day.values()) / len(per_day)
+            predicted_day = avg_day * invoice_days
+            predicted_night = avg_night * invoice_days
+            return {
+                "predicted_day_kwh": predicted_day,
+                "predicted_night_kwh": predicted_night,
+                "predicted_total_kwh": predicted_day + predicted_night,
+                "history_window_days": history_window_days,
+                "history_days_used": len(per_day),
+            }
+
+        per_day_single: Dict[date, float] = {}
+        for meter_id, d, value in meter.day_rows:
+            if meter_id not in meter_ids:
+                continue
+            if d < history_start or d > history_end:
+                continue
+            per_day_single[d] = per_day_single.get(d, 0.0) + value
+        if len(per_day_single) < 3:
+            return None
+        avg_day = sum(per_day_single.values()) / len(per_day_single)
+        predicted_total = avg_day * invoice_days
+        return {
+            "predicted_day_kwh": None,
+            "predicted_night_kwh": None,
+            "predicted_total_kwh": predicted_total,
+            "history_window_days": history_window_days,
+            "history_days_used": len(per_day_single),
+        }
 
     @staticmethod
     def _score(reasons: List[Dict[str, Any]]) -> Tuple[int, List[Dict[str, Any]]]:
@@ -1157,21 +1414,32 @@ class ChatService:
         requested_mpan = ChatService._extract_mpan(question)
 
         if re.search(r"address.*invoice.*contract|invoice.*address.*contract|address mentioned", question, re.IGNORECASE):
-            invoice_address = ChatService._extract_invoice_supply_address(invoice)
+            invoice_address = invoice.get("invoice_supply_address") or ChatService._extract_invoice_supply_address(invoice)
+            billing_address = invoice.get("invoice_billing_address")
             contract_addresses = ChatService._contract_values_for_invoice_mpans(invoice, contracts, "site_address")
             if invoice_address or contract_addresses:
                 contract_text = " | ".join(contract_addresses[:5]) if contract_addresses else "Not found in linked contracts."
                 invoice_text = invoice_address or "Not found in parsed invoice text."
+                billing_text = billing_address or "Not found in parsed invoice text."
                 return {
                     "answer": (
                         "Summary:\n"
-                        f"- Invoice address: {invoice_text}\n"
+                        f"- Invoice supply address: {invoice_text}\n"
+                        f"- Invoice billing address: {billing_text}\n"
                         f"- Contract address(es): {contract_text}\n"
                         "Details:\n"
-                        "- Invoice address is extracted from the parsed PDF text.\n"
+                        "- Invoice addresses are extracted/stored from parsed PDF pages.\n"
                         "- Contract address values come from contract records linked by invoice MPAN."
                     ),
                     "citations": [f"invoice:{invoice_no}"] + [f"contract:mpan:{m}" for m in sorted(invoice.get("mpans", {}).keys())[:5]],
+                }
+
+        if re.search(r"billing address|bill to address|postal address", question, re.IGNORECASE):
+            billing_address = invoice.get("invoice_billing_address")
+            if billing_address:
+                return {
+                    "answer": f"Summary:\n- Invoice billing address: {billing_address}\nDetails:\n- Retrieved from the parsed first page of the invoice.",
+                    "citations": [f"invoice:{invoice_no}"],
                 }
         linked_contracts = {}
         for mpan in sorted(invoice.get("mpans", {}).keys()):
@@ -1250,6 +1518,8 @@ class ChatService:
             "invoice_period_end": invoice.get("invoice_period_end"),
             "invoice_period_days": invoice.get("invoice_period_days"),
             "invoice_total_incl_vat": invoice.get("invoice_total_incl_vat"),
+            "invoice_supply_address": invoice.get("invoice_supply_address"),
+            "invoice_billing_address": invoice.get("invoice_billing_address"),
             "mpans": invoice.get("mpans"),
             "extracted_fields": invoice.get("extracted_fields"),
             "extracted_numeric_values": invoice.get("extracted_numeric_values"),
@@ -1764,11 +2034,13 @@ class AppHandler(BaseHTTPRequestHandler):
                 invoice: Optional[Dict[str, Any]] = None
                 query = parse_qs(parsed.query or "")
                 compare_meter_data = parse_bool((query.get("compare_meter_data") or [None])[0], default=True)
+                meter_tolerance_pct = to_float((query.get("meter_tolerance_pct") or [None])[0])
                 if "multipart/form-data" in ctype:
                     fields = self._parse_multipart()
                     upload = fields.get("file")
                     invoice_number = fields.get("invoice_number")
                     compare_meter_data = parse_bool(fields.get("compare_meter_data"), default=True)
+                    meter_tolerance_pct = to_float(fields.get("meter_tolerance_pct"))
                     if upload is not None:
                         save_path = self._save_upload(upload)
                         invoice = InvoiceService.parse_pdf(save_path)
@@ -1780,10 +2052,15 @@ class AppHandler(BaseHTTPRequestHandler):
                     invoices = load_json(INVOICE_STORE, {})
                     invoice = invoices.get(payload.get("invoice_number"))
                     compare_meter_data = parse_bool(payload.get("compare_meter_data"), default=True)
+                    meter_tolerance_pct = to_float(payload.get("meter_tolerance_pct"))
                 if not invoice:
                     self._json(400, {"error": "invoice file or valid invoice_number is required"})
                     return
-                validation = ValidationService.validate_invoice_record(invoice, compare_meter_data=compare_meter_data)
+                validation = ValidationService.validate_invoice_record(
+                    invoice,
+                    compare_meter_data=compare_meter_data,
+                    meter_tolerance_pct=meter_tolerance_pct,
+                )
                 self._json(200, {"ok": True, "validation": validation})
                 return
 

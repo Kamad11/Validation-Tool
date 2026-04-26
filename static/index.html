@@ -218,6 +218,11 @@
           <input id="compareMeterToggle" type="checkbox" checked />
           Compare with meter data
         </label>
+        <div class="row" style="margin-top:6px;">
+          <label for="meterToleranceInput" style="font-size:13px; color:#334155;">Meter tolerance (%)</label>
+          <input id="meterToleranceInput" type="text" value="2.0" style="max-width:140px" />
+          <span style="font-size:12px; color:#64748b;">Default: 2.0%</span>
+        </div>
         <div class="row" style="margin-top:8px">
           <button id="validateInvoiceBtn">Validate Invoice</button>
         </div>
@@ -240,9 +245,10 @@
       <section class="card">
         <h3>Latest Validation Result</h3>
         <div id="tabValidation">
-          <div id="scoreLine" class="status">No validation run yet.</div>
-          <div id="meterDataNote" class="status"></div>
-          <div class="score-track"><div id="scoreFill" class="score-fill"></div></div>
+        <div id="scoreLine" class="status">No validation run yet.</div>
+        <div id="meterDataNote" class="status"></div>
+        <div id="toleranceNote" class="status"></div>
+        <div class="score-track"><div id="scoreFill" class="score-fill"></div></div>
           <div class="metrics">
             <div class="metric">
               <div class="label">Status</div>
@@ -286,7 +292,7 @@
               </tbody>
             </table>
           </div>
-          <strong id="comparisonTitle">Comparison Table (Invoice vs Contract vs Meter)</strong>
+          <strong id="comparisonTitle">Comparison Table (Contract vs Invoice)</strong>
           <div class="table-wrap">
             <table>
               <thead>
@@ -295,12 +301,28 @@
                   <th>Check</th>
                   <th>Invoice</th>
                   <th>Contract</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="comparisonContractTbody">
+                <tr><td colspan="5">No comparison rows available.</td></tr>
+              </tbody>
+            </table>
+          </div>
+          <strong id="meterComparisonTitle" style="display:block; margin-top:8px;">Comparison Table (Invoice vs Meter)</strong>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>MPAN</th>
+                  <th>Check</th>
+                  <th>Invoice</th>
                   <th id="comparisonMeterHeader">Meter</th>
                   <th>Status</th>
                 </tr>
               </thead>
-              <tbody id="comparisonTbody">
-                <tr><td colspan="6">No validation yet.</td></tr>
+              <tbody id="comparisonMeterTbody">
+                <tr><td colspan="5">No meter comparison rows available.</td></tr>
               </tbody>
             </table>
           </div>
@@ -328,20 +350,24 @@
     const resultJson = document.getElementById("resultJson");
     const scoreLine = document.getElementById("scoreLine");
     const meterDataNote = document.getElementById("meterDataNote");
+    const toleranceNote = document.getElementById("toleranceNote");
     const metricStatus = document.getElementById("metricStatus");
     const metricScore = document.getElementById("metricScore");
     const metricBand = document.getElementById("metricBand");
     const reasonsList = document.getElementById("reasonsList");
-    const comparisonTbody = document.getElementById("comparisonTbody");
+    const comparisonContractTbody = document.getElementById("comparisonContractTbody");
+    const comparisonMeterTbody = document.getElementById("comparisonMeterTbody");
     const deductionsList = document.getElementById("deductionsList");
     const mpanSummaryTbody = document.getElementById("mpanSummaryTbody");
     const mpanMeterCostHeader = document.getElementById("mpanMeterCostHeader");
     const comparisonMeterHeader = document.getElementById("comparisonMeterHeader");
     const comparisonTitle = document.getElementById("comparisonTitle");
+    const meterComparisonTitle = document.getElementById("meterComparisonTitle");
     const scoreFill = document.getElementById("scoreFill");
     const chatBox = document.getElementById("chatBox");
     const chatInput = document.getElementById("chatInput");
     const invoiceNumberInput = document.getElementById("invoiceNumberInput");
+    const meterToleranceInput = document.getElementById("meterToleranceInput");
 
     function renderJSON(obj) {
       resultJson.textContent = JSON.stringify(obj, null, 2);
@@ -356,13 +382,15 @@
     function syncMeterColumns(showMeter) {
       mpanMeterCostHeader.style.display = showMeter ? "" : "none";
       comparisonMeterHeader.style.display = showMeter ? "" : "none";
-      comparisonTitle.textContent = showMeter
-        ? "Comparison Table (Invoice vs Contract vs Meter)"
-        : "Comparison Table (Invoice vs Contract)";
+      meterComparisonTitle.style.display = showMeter ? "" : "none";
+      meterToleranceInput.disabled = !showMeter;
       const mpanFirstRowCell = mpanSummaryTbody.querySelector("tr td[colspan]");
       if (mpanFirstRowCell) mpanFirstRowCell.colSpan = showMeter ? 7 : 6;
-      const comparisonFirstRowCell = comparisonTbody.querySelector("tr td[colspan]");
-      if (comparisonFirstRowCell) comparisonFirstRowCell.colSpan = showMeter ? 6 : 5;
+      const contractFirstRowCell = comparisonContractTbody.querySelector("tr td[colspan]");
+      if (contractFirstRowCell) contractFirstRowCell.colSpan = 5;
+      const meterFirstRowCell = comparisonMeterTbody.querySelector("tr td[colspan]");
+      if (meterFirstRowCell) meterFirstRowCell.colSpan = 5;
+      comparisonMeterTbody.parentElement.parentElement.style.display = showMeter ? "" : "none";
     }
 
     function renderValidation(out) {
@@ -373,6 +401,8 @@
       compareMeterToggle.checked = meterEnabled;
       scoreLine.innerHTML = `Invoice <b>${v.invoice_number || "-"}</b> validated: <span class="badge ${isPass ? "badge-pass" : "badge-fail"}">${v.status}</span> (${meterEnabled ? "with" : "without"} meter comparison)`;
       meterDataNote.textContent = v.meter_data_note || "";
+      const t = v.tolerances_used || {};
+      toleranceNote.textContent = `Tolerances used -> Rate: ${fmt(t.rate_tolerance_gbp)} GBP | Money: ${fmt(t.money_tolerance_gbp)} GBP | Meter: ${fmt(t.meter_tolerance_pct)}%`;
       metricStatus.innerHTML = `<span class="badge ${isPass ? "badge-pass" : "badge-fail"}">${v.status}</span>`;
       metricScore.textContent = `${v.score}`;
       metricBand.innerHTML = `<span class="${bandClass}">${v.score_band}</span>`;
@@ -435,32 +465,43 @@
         });
       }
 
-      const comparisons = v.comparisons || [];
-      comparisonTbody.innerHTML = "";
-      if (!comparisons.length) {
-        comparisonTbody.innerHTML = `<tr><td colspan="${meterEnabled ? 6 : 5}">No comparison rows available.</td></tr>`;
+      const contractComparisons = v.contract_invoice_comparisons || (v.comparisons || []).filter(r => r.comparison_scope === "contract_invoice" || !r.comparison_scope);
+      const meterComparisons = v.invoice_meter_comparisons || (v.comparisons || []).filter(r => r.comparison_scope === "invoice_meter");
+      comparisonContractTbody.innerHTML = "";
+      if (!contractComparisons.length) {
+        comparisonContractTbody.innerHTML = `<tr><td colspan="5">No contract vs invoice rows available.</td></tr>`;
       } else {
-        comparisons.forEach(row => {
+        contractComparisons.forEach(row => {
           const tr = document.createElement("tr");
           const status = (row.status || "N/A").toUpperCase();
           const statusClass = status === "PASS" ? "pill-pass" : status === "FAIL" ? "pill-fail" : "pill-na";
-          tr.innerHTML = meterEnabled
-            ? `
-              <td>${fmt(row.mpan)}</td>
-              <td>${fmt(row.check)}</td>
-              <td>${fmt(row.invoice_value)}</td>
-              <td>${fmt(row.contract_value)}</td>
-              <td>${fmt(row.meter_value)}</td>
-              <td><span class="${statusClass}">${status}</span></td>
-            `
-            : `
-              <td>${fmt(row.mpan)}</td>
-              <td>${fmt(row.check)}</td>
-              <td>${fmt(row.invoice_value)}</td>
-              <td>${fmt(row.contract_value)}</td>
-              <td><span class="${statusClass}">${status}</span></td>
-            `;
-          comparisonTbody.appendChild(tr);
+          tr.innerHTML = `
+            <td>${fmt(row.mpan)}</td>
+            <td>${fmt(row.check)}</td>
+            <td>${fmt(row.invoice_value)}</td>
+            <td>${fmt(row.contract_value)}</td>
+            <td><span class="${statusClass}">${status}</span></td>
+          `;
+          comparisonContractTbody.appendChild(tr);
+        });
+      }
+
+      comparisonMeterTbody.innerHTML = "";
+      if (!meterComparisons.length) {
+        comparisonMeterTbody.innerHTML = `<tr><td colspan="5">No invoice vs meter rows available.</td></tr>`;
+      } else {
+        meterComparisons.forEach(row => {
+          const tr = document.createElement("tr");
+          const status = (row.status || "N/A").toUpperCase();
+          const statusClass = status === "PASS" ? "pill-pass" : status === "FAIL" ? "pill-fail" : "pill-na";
+          tr.innerHTML = `
+            <td>${fmt(row.mpan)}</td>
+            <td>${fmt(row.check)}</td>
+            <td>${fmt(row.invoice_value)}</td>
+            <td>${fmt(row.meter_value)}</td>
+            <td><span class="${statusClass}">${status}</span></td>
+          `;
+          comparisonMeterTbody.appendChild(tr);
         });
       }
       renderJSON(v);
@@ -529,6 +570,7 @@
         fd.append("file", invoiceFile.files[0]);
         const compareMeter = compareMeterToggle.checked;
         fd.append("compare_meter_data", compareMeter ? "true" : "false");
+        fd.append("meter_tolerance_pct", meterToleranceInput.value.trim() || "2.0");
         const out = await api(`/api/invoices/validate?compare_meter_data=${compareMeter ? "true" : "false"}`, { method: "POST", body: fd });
         renderValidation(out);
         const v = out.validation || {};
