@@ -1394,6 +1394,11 @@ class ChatService:
         "can", "you", "me", "this", "that", "what", "which", "from", "about", "tell", "please",
         "invoice", "bill", "give", "show", "does", "have", "there", "any",
     }
+    _last_azure_error: Optional[str] = None
+
+    @staticmethod
+    def _set_azure_error(message: str) -> None:
+        ChatService._last_azure_error = message[:500] if message else "Unknown Azure OpenAI error."
 
     @staticmethod
     def answer(question: str, invoice_number: Optional[str] = None) -> Dict[str, Any]:
@@ -1487,10 +1492,12 @@ class ChatService:
         azure_answer = ChatService._answer_with_azure(question, top)
         if azure_answer:
             return {"answer": azure_answer, "citations": citations}
+        diagnostic = ChatService._last_azure_error or "No further Azure error detail captured."
         return {
             "answer": (
                 "Unable to get a response from Azure OpenAI right now. "
-                "Please check Azure OpenAI connectivity/configuration and try again."
+                "Please check Azure OpenAI connectivity/configuration and try again.\n\n"
+                f"Diagnostic:\n- {diagnostic}"
             ),
             "citations": citations,
         }
@@ -1507,6 +1514,10 @@ class ChatService:
         deployment = (os.environ.get("AZURE_OPENAI_DEPLOYMENT") or AZURE_OPENAI_DEPLOYMENT_DEFAULT).strip()
         api_version = (os.environ.get("AZURE_OPENAI_API_VERSION") or AZURE_OPENAI_API_VERSION_DEFAULT).strip()
         if not endpoint or not api_key or not deployment:
+            ChatService._set_azure_error(
+                f"Missing Azure config: endpoint_set={bool(endpoint)} api_key_set={bool(api_key)} "
+                f"deployment='{deployment or ''}' api_version='{api_version or ''}'"
+            )
             return None
 
         invoice_text = str(invoice.get("raw_text_full") or invoice.get("raw_text_excerpt") or "")
@@ -1585,12 +1596,21 @@ class ChatService:
                     f"body={err_body[:400]}",
                     flush=True,
                 )
+                ChatService._set_azure_error(
+                    f"HTTP {getattr(e, 'code', 'unknown')} on full-context chat call "
+                    f"(deployment='{deployment}', api_version='{api_version}', token_field='{token_field}'). "
+                    f"Response: {err_body[:260]}"
+                )
                 continue
             except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
                 print(
                     f"Azure chat full error deployment={deployment} api_version={api_version} "
                     f"token_field={token_field} error={e}",
                     flush=True,
+                )
+                ChatService._set_azure_error(
+                    f"Full-context chat network/parse error (deployment='{deployment}', api_version='{api_version}', "
+                    f"token_field='{token_field}'): {e}"
                 )
                 continue
         return None
@@ -1621,6 +1641,10 @@ class ChatService:
         deployment = (os.environ.get("AZURE_OPENAI_DEPLOYMENT") or AZURE_OPENAI_DEPLOYMENT_DEFAULT).strip()
         api_version = (os.environ.get("AZURE_OPENAI_API_VERSION") or AZURE_OPENAI_API_VERSION_DEFAULT).strip()
         if not endpoint or not api_key or not deployment:
+            ChatService._set_azure_error(
+                f"Missing Azure config: endpoint_set={bool(endpoint)} api_key_set={bool(api_key)} "
+                f"deployment='{deployment or ''}' api_version='{api_version or ''}'"
+            )
             return None
 
         system_prompt = (
@@ -1692,12 +1716,21 @@ class ChatService:
                         f"body={err_body[:400]}",
                         flush=True,
                     )
+                    ChatService._set_azure_error(
+                        f"HTTP {getattr(e, 'code', 'unknown')} on snippet chat call "
+                        f"(deployment='{deployment}', api_version='{api_version}', token_field='{token_field}'). "
+                        f"Response: {err_body[:260]}"
+                    )
                     continue
                 except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
                     print(
                         f"Azure chat snippet error deployment={deployment} api_version={api_version} "
                         f"token_field={token_field} error={e}",
                         flush=True,
+                    )
+                    ChatService._set_azure_error(
+                        f"Snippet chat network/parse error (deployment='{deployment}', api_version='{api_version}', "
+                        f"token_field='{token_field}'): {e}"
                     )
                     continue
         return None

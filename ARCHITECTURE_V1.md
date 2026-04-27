@@ -141,6 +141,7 @@ Meter toggle:
 Tolerance policy:
 - Rate tolerance: `0.0001 GBP` (0.01p)
 - Money tolerance: `0.02 GBP` (2p)
+- Meter tolerance: default `2.0%` (user-editable in UI per validation run)
 
 ## 5.5 ChatService
 Responsibilities:
@@ -163,22 +164,28 @@ Direct intents currently include:
 ---
 
 ## 6) Frontend (UI) Structure
-Single page in `static/index.html` with 4 main blocks:
+Single page in `static/index.html` with main blocks:
 1. Contract upload
 2. Invoice upload + validate
   - includes `Compare with meter data` checkbox
-3. Grounded chat
-4. Validation result dashboard
+  - includes meter tolerance input
+3. Validation result dashboard
   - status, score, band
+  - separate comparison score/status cards:
+    - Contract vs Invoice
+    - Invoice vs Meter
   - reasons
   - deduction list
   - MPAN summary table
-  - comparison table
+  - full-screen comparison table modal (opened on demand)
   - raw JSON section
+4. Grounded chat
+  - floating toggle button
+  - compact chat panel with user/bot tiles
+  - collapsible references
 
 Meter toggle UI behavior:
-- If disabled, meter columns are hidden from result tables.
-- Comparison title changes to Invoice vs Contract.
+- If disabled, invoice-vs-meter score card and table-view button are hidden.
 
 ---
 
@@ -196,14 +203,16 @@ Stores parsed invoice artifact.
 
 ## `POST /api/invoices/validate`
 Supports:
-- Multipart: `file` OR `invoice_number`, optional `compare_meter_data`
-- JSON: `invoice_number`, optional `compare_meter_data`
+- Multipart: `file` OR `invoice_number`, optional `compare_meter_data`, optional `meter_tolerance_pct`
+- JSON: `invoice_number`, optional `compare_meter_data`, optional `meter_tolerance_pct`
 
 Returns validation object with:
 - `status`, `score`, `score_band`
 - `reasons`, `deductions`, `evidence`, `comparisons`
+- `contract_invoice_comparisons`, `invoice_meter_comparisons`
 - `mpan_summary`
 - `meter_comparison_enabled`
+- `tolerances_used`
 - `meter_data_note`
 - `meter_data_normalization`:
   - `half_hour_wh_converted_rows`
@@ -232,6 +241,7 @@ Keyed by MPAN. Includes normalized rate fields:
 Keyed by invoice number. Includes:
 - invoice metadata
 - `mpans` map with energy/standing rows
+- `invoice_supply_address`, `invoice_billing_address`
 - `raw_text_full` for grounded chat
 
 ## `validations.json`
@@ -256,7 +266,7 @@ sequenceDiagram
   participant DS as JSON Stores
 
   U->>FE: Upload contract/invoice, click validate
-  FE->>API: POST /api/invoices/validate (+ compare_meter_data)
+  FE->>API: POST /api/invoices/validate (+ compare_meter_data + meter_tolerance_pct)
   API->>INV: parse_pdf (if file provided)
   INV->>DS: save invoices.json
   API->>VAL: validate_invoice_record(invoice, compare_meter_data)
@@ -281,7 +291,7 @@ sequenceDiagram
 - Optional meter comparison toggle.
 - Weighted score + banding + deductions.
 - MPAN-level summary output.
-- Comparison tables in UI.
+- On-demand full-screen comparison tables in UI.
 - Grounded chatbot with citations.
 
 ---
@@ -394,10 +404,17 @@ Use this section as the primary routing guide when implementing changes from nat
   - Load defaults button (`loadExistingContractsBtn`) -> `/api/contracts/load-defaults`
   - Validate button (`validateInvoiceBtn`) -> `/api/invoices/validate`
   - Chat send button (`sendChatBtn`) -> `/api/chat`
+  - Chat toggle button (`chatToggleBtn`) -> open/minimize chat panel
+  - Comparison view buttons:
+    - `viewContractValuesBtn` -> full-screen contract-vs-invoice table
+    - `viewMeterValuesBtn` -> full-screen invoice-vs-meter table
 
 - Rendering functions:
-  - `renderValidation(out)` -> summary cards, reasons, deductions, MPAN summary, comparison table
-  - `syncMeterColumns(showMeter)` -> meter column hide/show and comparison title
+  - `renderValidation(out)` -> summary cards, comparison stats, reasons, deductions, MPAN summary
+  - `openComparisonModal(kind)` -> full-screen comparison table rendering
+  - `closeComparisonModal()` -> closes modal
+  - `syncMeterColumns(showMeter)` -> meter score-card/button visibility
+  - `formatBotContent(text)` -> structured bot response rendering in chat tiles
   - `fmt(value)` -> numeric/text display formatting
 
 - Edit guidance:
@@ -430,6 +447,12 @@ Do not change storage shapes without checking all readers in `ValidationService`
 - “Add endpoint”:
   - `AppHandler.do_GET` or `do_POST`
   - include request parsing + stable JSON response
+- “Change Azure chat defaults/config”:
+  - top constants in `app/server.py`:
+    - `AZURE_OPENAI_ENDPOINT_DEFAULT`
+    - `AZURE_OPENAI_DEPLOYMENT_DEFAULT`
+    - `AZURE_OPENAI_API_VERSION_DEFAULT`
+  - chat call/retry behavior in `ChatService._answer_with_azure_full` and `ChatService._answer_with_azure`
 
 ## 14.6 Safe Change Checklist For Agents
 - Keep validation deterministic (no hidden nondeterministic logic).

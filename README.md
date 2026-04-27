@@ -14,6 +14,7 @@ This project runs a local chatbot + validation engine for electricity invoices.
 - Validation uses explicit tolerances:
   - Rate tolerance: `0.0001 GBP` (`0.01p`)
   - Money tolerance: `0.02 GBP`
+  - Meter tolerance (percent): default `2.0%`, user-editable in UI
 - Cross-check meter consumption using:
   - `Meter Data/meters.data` (MPAN-last4 mapping)
   - `Meter Data/half-hour.data` (day/night tariffs)
@@ -29,7 +30,11 @@ This project runs a local chatbot + validation engine for electricity invoices.
   - Expected from contract x meter usage
 - Grounded chat answers only from uploaded/parsed evidence.
 - Chat can answer from the full stored invoice content, with citations to invoice text chunks.
-- UI includes a comparison table for Invoice vs Contract vs Meter values per MPAN/check.
+- UI shows separate score/status cards for:
+  - Contract vs Invoice
+  - Invoice vs Meter
+- Detailed comparison values open on demand in a full-screen table modal.
+- Chat opens from a floating toggle button and supports collapsible references.
 - Validation can be run with meter comparison enabled/disabled from the UI toggle.
 - Validation output includes a meter-data note indicating whether Wh->kWh normalization was applied.
 
@@ -65,17 +70,14 @@ python tests\smoke_test.py
 ## Optional Environment Variables
 - `HOST` (default `127.0.0.1`)
 - `PORT` (default `8000`)
-- `AZURE_OPENAI_ENDPOINT` (for grounded chat completion)
+- `AZURE_OPENAI_ENDPOINT` (optional override; hardcoded default is present in `app/server.py`)
 - `AZURE_OPENAI_API_KEY` (for grounded chat completion)
-- `AZURE_OPENAI_DEPLOYMENT` (Azure deployment name, for example `gpt-5`)
-- `AZURE_OPENAI_API_VERSION` (default in code: `2024-10-21`)
+- `AZURE_OPENAI_DEPLOYMENT` (optional override; hardcoded default is `gpt-5-mini`)
+- `AZURE_OPENAI_API_VERSION` (optional override; hardcoded default is `2024-10-21`)
 
-Example (PowerShell, current session only):
+Minimum required (PowerShell, current session only):
 ```powershell
-$env:AZURE_OPENAI_ENDPOINT = "https://<your-resource>.openai.azure.com/"
 $env:AZURE_OPENAI_API_KEY = "<your-api-key>"
-$env:AZURE_OPENAI_DEPLOYMENT = "gpt-5"
-$env:AZURE_OPENAI_API_VERSION = "2024-10-21"
 ```
 
 ## API Endpoints
@@ -87,8 +89,8 @@ $env:AZURE_OPENAI_API_VERSION = "2024-10-21"
 - `GET /api/state`
 
 ## Notes
-- Azure deployment/integration intentionally deferred for local POC.
-- Chat is evidence-grounded retrieval/rules, not open-domain answering.
+- Chat is evidence-grounded using stored invoice/contract/validation context.
+- If Azure chat fails, the response includes a short `Diagnostic` line to help identify config/connectivity issues.
 
 ## Push To GitHub
 
