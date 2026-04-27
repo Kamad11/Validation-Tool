@@ -60,17 +60,39 @@
       border: 1px solid var(--border);
       background: #f8fbff;
       border-radius: 10px;
-      height: 280px;
+      height: 190px;
       overflow: auto;
       padding: 10px;
       margin-bottom: 8px;
-      font-size: 14px;
+      font-size: 13px;
     }
-    .msg { margin: 0 0 10px; line-height: 1.35; }
-    .user { color: #0f172a; }
-    .bot { color: #134e4a; }
-    .msg-head { font-weight: 700; margin-bottom: 2px; }
-    .msg-body { white-space: pre-wrap; }
+    .msg {
+      margin: 0 0 8px;
+      line-height: 1.35;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      max-width: 92%;
+    }
+    .msg.user {
+      margin-left: auto;
+      background: #dff4ff;
+      border-color: #bfdbfe;
+      color: #0f172a;
+    }
+    .msg.bot {
+      margin-right: auto;
+      background: #ecfdf5;
+      border-color: #bbf7d0;
+      color: #134e4a;
+    }
+    .msg-head {
+      font-weight: 700;
+      margin-bottom: 2px;
+      font-size: 12px;
+      opacity: 0.85;
+    }
+    .msg-body { white-space: pre-wrap; font-size: 13px; }
     .msg-citations {
       margin-top: 4px;
       font-size: 12px;
@@ -122,21 +144,24 @@
     .table-wrap {
       border: 1px solid var(--border);
       border-radius: 10px;
-      overflow: auto;
+      overflow: visible;
       background: #fff;
-      max-height: 300px;
+      max-height: none;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       font-size: 12px;
-      min-width: 760px;
+      min-width: 100%;
     }
     th, td {
       border-bottom: 1px solid #e2e8f0;
       padding: 7px 8px;
       text-align: left;
       vertical-align: top;
+      white-space: normal;
+      word-break: normal;
+      overflow-wrap: normal;
     }
     th {
       position: sticky;
@@ -189,6 +214,159 @@
       margin: 0 0 8px;
       font-size: 13px;
     }
+    .comparison-grid {
+      display: grid;
+      gap: 12px;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      margin-top: 8px;
+    }
+    .comparison-panel {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #fbfdff;
+      padding: 10px;
+    }
+    .comparison-panel h4 {
+      margin: 0 0 6px;
+      font-size: 14px;
+    }
+    .comparison-summary {
+      font-size: 12px;
+      color: var(--muted);
+      margin-bottom: 8px;
+    }
+    .comparison-score-grid {
+      display: grid;
+      gap: 10px;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      margin: 10px 0 12px;
+    }
+    .score-card {
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      background: #f9fcff;
+      padding: 10px;
+    }
+    .score-card h4 {
+      margin: 0 0 8px;
+      font-size: 13px;
+    }
+    .score-card .actions {
+      margin-top: 8px;
+      display: flex;
+      justify-content: flex-start;
+    }
+    .score-card .actions button {
+      padding: 7px 11px;
+      font-size: 12px;
+    }
+    .chat-fab {
+      position: fixed;
+      right: 18px;
+      bottom: 18px;
+      z-index: 999;
+      width: 72px;
+      height: 72px;
+      border-radius: 999px;
+      padding: 0;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      background: transparent;
+      border: 2px solid #ffffff;
+      box-shadow: 0 12px 24px rgba(2, 6, 23, 0.25);
+      transition: transform 160ms ease, box-shadow 160ms ease;
+    }
+    .chat-fab:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 16px 26px rgba(2, 6, 23, 0.28);
+    }
+    .chat-fab img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      display: block;
+      border-radius: 999px;
+    }
+    .chat-fab.open {
+      box-shadow: 0 0 0 3px rgba(14, 116, 144, 0.25), 0 16px 26px rgba(2, 6, 23, 0.28);
+    }
+    .sr-only {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      padding: 0;
+      margin: -1px;
+      overflow: hidden;
+      clip: rect(0, 0, 0, 0);
+      border: 0;
+    }
+    .chat-panel {
+      position: fixed;
+      right: 18px;
+      bottom: 74px;
+      width: min(340px, calc(100vw - 24px));
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 10px;
+      box-shadow: 0 16px 30px rgba(2, 6, 23, 0.2);
+      z-index: 998;
+      display: none;
+    }
+    .chat-panel.open {
+      display: block;
+    }
+    .chat-list {
+      margin: 4px 0 0 18px;
+      padding: 0;
+    }
+    .chat-list li {
+      margin: 2px 0;
+    }
+    .fullscreen-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(2, 6, 23, 0.55);
+      z-index: 1001;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 10px;
+    }
+    .fullscreen-modal.open {
+      display: flex;
+    }
+    .fullscreen-modal-card {
+      width: min(1280px, 98vw);
+      height: 94vh;
+      background: #fff;
+      border-radius: 12px;
+      border: 1px solid var(--border);
+      box-shadow: 0 20px 34px rgba(2, 6, 23, 0.28);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+    .fullscreen-modal-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      background: #f7fbff;
+    }
+    .fullscreen-modal-body {
+      padding: 10px;
+      overflow: auto;
+      flex: 1;
+    }
+    .cell-status {
+      white-space: nowrap;
+      width: 1%;
+    }
   </style>
 </head>
 <body>
@@ -232,23 +410,56 @@
 
     <div class="grid" style="margin-top:14px">
       <section class="card">
-        <h3>3) Ask Grounded Questions</h3>
-        <div class="chat-box" id="chatBox"></div>
-        <input id="invoiceNumberInput" type="text" placeholder="Optional invoice number (e.g. 000027224635)" />
-        <div style="height:8px"></div>
-        <input id="chatInput" type="text" placeholder="Ask anything to validate from uploaded data..." />
-        <div class="row" style="margin-top:8px">
-          <button id="sendChatBtn">Send</button>
-        </div>
-      </section>
-
-      <section class="card">
         <h3>Latest Validation Result</h3>
         <div id="tabValidation">
         <div id="scoreLine" class="status">No validation run yet.</div>
         <div id="meterDataNote" class="status"></div>
         <div id="toleranceNote" class="status"></div>
         <div class="score-track"><div id="scoreFill" class="score-fill"></div></div>
+        <div class="comparison-score-grid">
+          <div class="score-card">
+            <h4>Contract vs Invoice Score</h4>
+            <div class="metrics">
+              <div class="metric">
+                <div class="label">Status</div>
+                <div class="value" id="metricCviStatus">-</div>
+              </div>
+              <div class="metric">
+                <div class="label">Score</div>
+                <div class="value" id="metricCviScore">-</div>
+              </div>
+              <div class="metric">
+                <div class="label">Band</div>
+                <div class="value" id="metricCviBand">-</div>
+              </div>
+            </div>
+            <div id="contractValidationSummary" class="comparison-summary">No comparison run yet.</div>
+            <div class="actions">
+              <button id="viewContractValuesBtn" type="button">View Compared Values</button>
+            </div>
+          </div>
+          <div id="meterScoreCard" class="score-card">
+            <h4>Invoice vs Meter Score</h4>
+            <div class="metrics">
+              <div class="metric">
+                <div class="label">Status</div>
+                <div class="value" id="metricIvmStatus">-</div>
+              </div>
+              <div class="metric">
+                <div class="label">Score</div>
+                <div class="value" id="metricIvmScore">-</div>
+              </div>
+              <div class="metric">
+                <div class="label">Band</div>
+                <div class="value" id="metricIvmBand">-</div>
+              </div>
+            </div>
+            <div id="meterValidationSummary" class="comparison-summary">No comparison run yet.</div>
+            <div class="actions">
+              <button id="viewMeterValuesBtn" type="button">View Compared Values</button>
+            </div>
+          </div>
+        </div>
           <div class="metrics">
             <div class="metric">
               <div class="label">Status</div>
@@ -292,40 +503,6 @@
               </tbody>
             </table>
           </div>
-          <strong id="comparisonTitle">Comparison Table (Contract vs Invoice)</strong>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>MPAN</th>
-                  <th>Check</th>
-                  <th>Invoice</th>
-                  <th>Contract</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="comparisonContractTbody">
-                <tr><td colspan="5">No comparison rows available.</td></tr>
-              </tbody>
-            </table>
-          </div>
-          <strong id="meterComparisonTitle" style="display:block; margin-top:8px;">Comparison Table (Invoice vs Meter)</strong>
-          <div class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>MPAN</th>
-                  <th>Check</th>
-                  <th>Invoice</th>
-                  <th id="comparisonMeterHeader">Meter</th>
-                  <th>Status</th>
-                </tr>
-              </thead>
-              <tbody id="comparisonMeterTbody">
-                <tr><td colspan="5">No meter comparison rows available.</td></tr>
-              </tbody>
-            </table>
-          </div>
           <details style="margin-top:10px">
             <summary style="cursor:pointer; color:#0f172a;">Raw Validation JSON</summary>
             <div id="resultJson" class="mono" style="margin-top:8px"></div>
@@ -334,6 +511,36 @@
       </section>
     </div>
   </div>
+  <button id="chatToggleBtn" class="chat-fab" aria-label="Open chat" title="Open chat">
+    <img src="/assets/chatbot-button.png" alt="Chat assistant" />
+    <span class="sr-only">Open chat</span>
+  </button>
+  <section id="chatPanel" class="chat-panel" aria-hidden="true">
+    <h3 style="margin:0 0 8px; font-size:15px;">Ask Questions</h3>
+    <div class="chat-box" id="chatBox"></div>
+    <input id="invoiceNumberInput" type="text" placeholder="Optional invoice number" />
+    <div style="height:8px"></div>
+    <input id="chatInput" type="text" placeholder="Ask from invoice/contract..." />
+    <div class="row" style="margin-top:8px">
+      <button id="sendChatBtn">Send</button>
+    </div>
+  </section>
+  <section id="comparisonModal" class="fullscreen-modal" aria-hidden="true">
+    <div class="fullscreen-modal-card">
+      <div class="fullscreen-modal-head">
+        <strong id="comparisonModalTitle">Compared Values</strong>
+        <button id="comparisonModalCloseBtn" type="button">Close</button>
+      </div>
+      <div class="fullscreen-modal-body">
+        <div class="table-wrap">
+          <table>
+            <thead id="comparisonModalThead"></thead>
+            <tbody id="comparisonModalTbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </section>
 
   <script>
     const api = (path, opts) => fetch(path, opts).then(async r => {
@@ -354,20 +561,36 @@
     const metricStatus = document.getElementById("metricStatus");
     const metricScore = document.getElementById("metricScore");
     const metricBand = document.getElementById("metricBand");
+    const metricCviStatus = document.getElementById("metricCviStatus");
+    const metricCviScore = document.getElementById("metricCviScore");
+    const metricCviBand = document.getElementById("metricCviBand");
+    const metricIvmStatus = document.getElementById("metricIvmStatus");
+    const metricIvmScore = document.getElementById("metricIvmScore");
+    const metricIvmBand = document.getElementById("metricIvmBand");
+    const meterScoreCard = document.getElementById("meterScoreCard");
     const reasonsList = document.getElementById("reasonsList");
-    const comparisonContractTbody = document.getElementById("comparisonContractTbody");
-    const comparisonMeterTbody = document.getElementById("comparisonMeterTbody");
+    const viewContractValuesBtn = document.getElementById("viewContractValuesBtn");
+    const viewMeterValuesBtn = document.getElementById("viewMeterValuesBtn");
+    const contractValidationSummary = document.getElementById("contractValidationSummary");
+    const meterValidationSummary = document.getElementById("meterValidationSummary");
     const deductionsList = document.getElementById("deductionsList");
     const mpanSummaryTbody = document.getElementById("mpanSummaryTbody");
     const mpanMeterCostHeader = document.getElementById("mpanMeterCostHeader");
-    const comparisonMeterHeader = document.getElementById("comparisonMeterHeader");
-    const comparisonTitle = document.getElementById("comparisonTitle");
-    const meterComparisonTitle = document.getElementById("meterComparisonTitle");
     const scoreFill = document.getElementById("scoreFill");
     const chatBox = document.getElementById("chatBox");
     const chatInput = document.getElementById("chatInput");
     const invoiceNumberInput = document.getElementById("invoiceNumberInput");
     const meterToleranceInput = document.getElementById("meterToleranceInput");
+    const chatToggleBtn = document.getElementById("chatToggleBtn");
+    const chatPanel = document.getElementById("chatPanel");
+    const comparisonModal = document.getElementById("comparisonModal");
+    const comparisonModalTitle = document.getElementById("comparisonModalTitle");
+    const comparisonModalThead = document.getElementById("comparisonModalThead");
+    const comparisonModalTbody = document.getElementById("comparisonModalTbody");
+    const comparisonModalCloseBtn = document.getElementById("comparisonModalCloseBtn");
+
+    let latestContractComparisons = [];
+    let latestMeterComparisons = [];
 
     function renderJSON(obj) {
       resultJson.textContent = JSON.stringify(obj, null, 2);
@@ -381,16 +604,123 @@
 
     function syncMeterColumns(showMeter) {
       mpanMeterCostHeader.style.display = showMeter ? "" : "none";
-      comparisonMeterHeader.style.display = showMeter ? "" : "none";
-      meterComparisonTitle.style.display = showMeter ? "" : "none";
       meterToleranceInput.disabled = !showMeter;
+      meterScoreCard.style.display = showMeter ? "" : "none";
+      viewMeterValuesBtn.style.display = showMeter ? "" : "none";
       const mpanFirstRowCell = mpanSummaryTbody.querySelector("tr td[colspan]");
       if (mpanFirstRowCell) mpanFirstRowCell.colSpan = showMeter ? 7 : 6;
-      const contractFirstRowCell = comparisonContractTbody.querySelector("tr td[colspan]");
-      if (contractFirstRowCell) contractFirstRowCell.colSpan = 5;
-      const meterFirstRowCell = comparisonMeterTbody.querySelector("tr td[colspan]");
-      if (meterFirstRowCell) meterFirstRowCell.colSpan = 5;
-      comparisonMeterTbody.parentElement.parentElement.style.display = showMeter ? "" : "none";
+    }
+
+    function summarizeComparison(rows) {
+      const summary = { pass: 0, fail: 0, predicted: 0, na: 0, other: 0, total: rows.length };
+      rows.forEach(row => {
+        const status = String(row.status || "").toUpperCase();
+        if (status === "PASS") summary.pass += 1;
+        else if (status === "FAIL") summary.fail += 1;
+        else if (status === "PREDICTED") summary.predicted += 1;
+        else if (status === "N/A") summary.na += 1;
+        else summary.other += 1;
+      });
+      let overall = "N/A";
+      if (summary.fail > 0) overall = "FAIL";
+      else if (summary.pass > 0) overall = "PASS";
+      else if (summary.predicted > 0) overall = "PREDICTED";
+      return { ...summary, overall };
+    }
+
+    function summaryBadge(status) {
+      const upper = String(status || "N/A").toUpperCase();
+      if (upper === "PASS") return `<span class="pill-pass">PASS</span>`;
+      if (upper === "FAIL") return `<span class="pill-fail">FAIL</span>`;
+      return `<span class="pill-na">${upper}</span>`;
+    }
+
+    function bandFromScore(score) {
+      if (score === null || score === undefined) return "N/A";
+      if (score >= 95) return "Green";
+      if (score >= 80) return "Amber";
+      return "Red";
+    }
+
+    function comparisonScore(rows) {
+      const counts = summarizeComparison(rows);
+      const considered = counts.pass + counts.fail;
+      const score = considered > 0 ? Math.round((counts.pass / considered) * 100) : null;
+      const status = counts.fail > 0 ? "FAIL" : counts.pass > 0 ? "PASS" : counts.predicted > 0 ? "PREDICTED" : "N/A";
+      return { score, status, band: bandFromScore(score) };
+    }
+
+    function formatBotContent(text) {
+      const wrap = document.createElement("div");
+      const lines = String(text || "").split(/\r?\n/);
+      let i = 0;
+      while (i < lines.length) {
+        const line = lines[i].trim();
+        if (!line) {
+          i += 1;
+          continue;
+        }
+        const next = (lines[i + 1] || "").trim();
+        if (line.endsWith(":") && next.startsWith("- ")) {
+          const h = document.createElement("div");
+          h.style.fontWeight = "700";
+          h.style.marginTop = "4px";
+          h.textContent = line;
+          wrap.appendChild(h);
+          const ul = document.createElement("ul");
+          ul.className = "chat-list";
+          i += 1;
+          while (i < lines.length) {
+            const bullet = lines[i].trim();
+            if (!bullet.startsWith("- ")) break;
+            const li = document.createElement("li");
+            li.textContent = bullet.slice(2);
+            ul.appendChild(li);
+            i += 1;
+          }
+          wrap.appendChild(ul);
+          continue;
+        }
+        const p = document.createElement("div");
+        p.textContent = line;
+        wrap.appendChild(p);
+        i += 1;
+      }
+      return wrap;
+    }
+
+    function openComparisonModal(kind) {
+      const isMeter = kind === "meter";
+      const rows = isMeter ? latestMeterComparisons : latestContractComparisons;
+      const headers = isMeter ? ["MPAN", "Check", "Invoice", "Meter", "Status"] : ["MPAN", "Check", "Invoice", "Contract", "Status"];
+      const valueKey = isMeter ? "meter_value" : "contract_value";
+      comparisonModalTitle.textContent = isMeter ? "Invoice vs Meter - Compared Values" : "Contract vs Invoice - Compared Values";
+      comparisonModalThead.innerHTML = `<tr>${headers.map(h => `<th>${h}</th>`).join("")}</tr>`;
+      comparisonModalTbody.innerHTML = "";
+      if (!rows.length) {
+        comparisonModalTbody.innerHTML = `<tr><td colspan="5">No compared values available.</td></tr>`;
+      } else {
+        rows.forEach(row => {
+          const status = (row.status || "N/A").toUpperCase();
+          const statusClass = status === "PASS" ? "pill-pass" : status === "FAIL" ? "pill-fail" : "pill-na";
+          const tr = document.createElement("tr");
+          tr.innerHTML = `
+            <td>${fmt(row.mpan)}</td>
+            <td>${fmt(row.check)}</td>
+            <td>${fmt(row.invoice_value)}</td>
+            <td>${fmt(row[valueKey])}</td>
+            <td class="cell-status"><span class="${statusClass}">${status}</span></td>
+          `;
+          comparisonModalTbody.appendChild(tr);
+        });
+      }
+      comparisonModal.classList.add("open");
+      comparisonModal.setAttribute("aria-hidden", "false");
+    }
+
+    function closeComparisonModal() {
+      comparisonModal.classList.remove("open");
+      comparisonModal.setAttribute("aria-hidden", "true");
     }
 
     function renderValidation(out) {
@@ -467,43 +797,22 @@
 
       const contractComparisons = v.contract_invoice_comparisons || (v.comparisons || []).filter(r => r.comparison_scope === "contract_invoice" || !r.comparison_scope);
       const meterComparisons = v.invoice_meter_comparisons || (v.comparisons || []).filter(r => r.comparison_scope === "invoice_meter");
-      comparisonContractTbody.innerHTML = "";
-      if (!contractComparisons.length) {
-        comparisonContractTbody.innerHTML = `<tr><td colspan="5">No contract vs invoice rows available.</td></tr>`;
-      } else {
-        contractComparisons.forEach(row => {
-          const tr = document.createElement("tr");
-          const status = (row.status || "N/A").toUpperCase();
-          const statusClass = status === "PASS" ? "pill-pass" : status === "FAIL" ? "pill-fail" : "pill-na";
-          tr.innerHTML = `
-            <td>${fmt(row.mpan)}</td>
-            <td>${fmt(row.check)}</td>
-            <td>${fmt(row.invoice_value)}</td>
-            <td>${fmt(row.contract_value)}</td>
-            <td><span class="${statusClass}">${status}</span></td>
-          `;
-          comparisonContractTbody.appendChild(tr);
-        });
-      }
-
-      comparisonMeterTbody.innerHTML = "";
-      if (!meterComparisons.length) {
-        comparisonMeterTbody.innerHTML = `<tr><td colspan="5">No invoice vs meter rows available.</td></tr>`;
-      } else {
-        meterComparisons.forEach(row => {
-          const tr = document.createElement("tr");
-          const status = (row.status || "N/A").toUpperCase();
-          const statusClass = status === "PASS" ? "pill-pass" : status === "FAIL" ? "pill-fail" : "pill-na";
-          tr.innerHTML = `
-            <td>${fmt(row.mpan)}</td>
-            <td>${fmt(row.check)}</td>
-            <td>${fmt(row.invoice_value)}</td>
-            <td>${fmt(row.meter_value)}</td>
-            <td><span class="${statusClass}">${status}</span></td>
-          `;
-          comparisonMeterTbody.appendChild(tr);
-        });
-      }
+      latestContractComparisons = contractComparisons;
+      latestMeterComparisons = meterComparisons;
+      const contractStats = summarizeComparison(contractComparisons);
+      const meterStats = summarizeComparison(meterComparisons);
+      const contractMetric = comparisonScore(contractComparisons);
+      const meterMetric = comparisonScore(meterComparisons);
+      const contractStatusClass = contractMetric.status === "PASS" ? "pill-pass" : contractMetric.status === "FAIL" ? "pill-fail" : "pill-na";
+      const meterStatusClass = meterMetric.status === "PASS" ? "pill-pass" : meterMetric.status === "FAIL" ? "pill-fail" : "pill-na";
+      metricCviStatus.innerHTML = `<span class="${contractStatusClass}">${contractMetric.status}</span>`;
+      metricCviScore.textContent = contractMetric.score === null ? "-" : String(contractMetric.score);
+      metricCviBand.innerHTML = contractMetric.band === "N/A" ? `<span class="pill-na">N/A</span>` : `<span class="band-${contractMetric.band}">${contractMetric.band}</span>`;
+      metricIvmStatus.innerHTML = `<span class="${meterStatusClass}">${meterMetric.status}</span>`;
+      metricIvmScore.textContent = meterMetric.score === null ? "-" : String(meterMetric.score);
+      metricIvmBand.innerHTML = meterMetric.band === "N/A" ? `<span class="pill-na">N/A</span>` : `<span class="band-${meterMetric.band}">${meterMetric.band}</span>`;
+      contractValidationSummary.innerHTML = `${summaryBadge(contractStats.overall)} Rows: ${contractStats.total} | Pass: ${contractStats.pass} | Fail: ${contractStats.fail} | Predicted: ${contractStats.predicted} | N/A: ${contractStats.na}`;
+      meterValidationSummary.innerHTML = `${summaryBadge(meterStats.overall)} Rows: ${meterStats.total} | Pass: ${meterStats.pass} | Fail: ${meterStats.fail} | Predicted: ${meterStats.predicted} | N/A: ${meterStats.na}`;
       renderJSON(v);
     }
 
@@ -516,16 +825,25 @@
 
       const body = document.createElement("div");
       body.className = "msg-body";
-      body.textContent = text || "";
+      if (role === "bot") {
+        body.appendChild(formatBotContent(text || ""));
+      } else {
+        body.textContent = text || "";
+      }
 
       p.appendChild(head);
       p.appendChild(body);
 
       if (citations.length) {
-        const cite = document.createElement("div");
-        cite.className = "msg-citations";
-        cite.textContent = `Citations:\n- ${citations.join("\n- ")}`;
-        p.appendChild(cite);
+        const citeDetails = document.createElement("details");
+        citeDetails.className = "msg-citations";
+        const summary = document.createElement("summary");
+        summary.textContent = `References (${citations.length})`;
+        const body = document.createElement("div");
+        body.textContent = `- ${citations.join("\n- ")}`;
+        citeDetails.appendChild(summary);
+        citeDetails.appendChild(body);
+        p.appendChild(citeDetails);
       }
       chatBox.appendChild(p);
       chatBox.scrollTop = chatBox.scrollHeight;
@@ -585,6 +903,22 @@
       syncMeterColumns(compareMeterToggle.checked);
     };
     syncMeterColumns(compareMeterToggle.checked);
+
+    chatToggleBtn.onclick = () => {
+      const isOpen = chatPanel.classList.toggle("open");
+      chatToggleBtn.classList.toggle("open", isOpen);
+      chatPanel.setAttribute("aria-hidden", isOpen ? "false" : "true");
+      chatToggleBtn.setAttribute("aria-label", isOpen ? "Minimize chat" : "Open chat");
+      chatToggleBtn.setAttribute("title", isOpen ? "Minimize chat" : "Open chat");
+      if (isOpen) chatInput.focus();
+    };
+
+    viewContractValuesBtn.onclick = () => openComparisonModal("contract");
+    viewMeterValuesBtn.onclick = () => openComparisonModal("meter");
+    comparisonModalCloseBtn.onclick = () => closeComparisonModal();
+    comparisonModal.onclick = (e) => {
+      if (e.target === comparisonModal) closeComparisonModal();
+    };
 
     document.getElementById("sendChatBtn").onclick = async () => {
       const question = chatInput.value.trim();

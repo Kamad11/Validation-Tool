@@ -25,7 +25,7 @@ METER_DIR = ROOT / "Meter Data"
 AZURE_OPENAI_ENDPOINT_DEFAULT = "https://openai-aliando-pov.openai.azure.com/"
 # Intentionally blank by default; set your key directly or via AZURE_OPENAI_API_KEY env var.
 AZURE_OPENAI_API_KEY_DEFAULT = ""
-AZURE_OPENAI_DEPLOYMENT_DEFAULT = "gpt-5"
+AZURE_OPENAI_DEPLOYMENT_DEFAULT = "gpt-5-mini"
 AZURE_OPENAI_API_VERSION_DEFAULT = "2024-10-21"
 
 CONTRACT_STORE = DATA_STORE_DIR / "contracts.json"
@@ -1489,7 +1489,7 @@ class ChatService:
             return {"answer": azure_answer, "citations": citations}
         return {
             "answer": (
-                "Unable to get a response from GPT-5 right now. "
+                "Unable to get a response from Azure OpenAI right now. "
                 "Please check Azure OpenAI connectivity/configuration and try again."
             ),
             "citations": citations,
@@ -1504,7 +1504,7 @@ class ChatService:
     ) -> Optional[str]:
         endpoint = (os.environ.get("AZURE_OPENAI_ENDPOINT") or AZURE_OPENAI_ENDPOINT_DEFAULT).strip().rstrip("/")
         api_key = (os.environ.get("AZURE_OPENAI_API_KEY") or AZURE_OPENAI_API_KEY_DEFAULT).strip()
-        deployment = AZURE_OPENAI_DEPLOYMENT_DEFAULT
+        deployment = (os.environ.get("AZURE_OPENAI_DEPLOYMENT") or AZURE_OPENAI_DEPLOYMENT_DEFAULT).strip()
         api_version = (os.environ.get("AZURE_OPENAI_API_VERSION") or AZURE_OPENAI_API_VERSION_DEFAULT).strip()
         if not endpoint or not api_key or not deployment:
             return None
@@ -1549,30 +1549,51 @@ class ChatService:
             f"Latest validation JSON:\n{json.dumps(validation_payload, ensure_ascii=True)}\n\n"
             f"Full invoice PDF extracted text:\n{invoice_text}\n"
         )
-        payload = {
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ],
-            "max_completion_tokens": 1400,
-        }
+        base_messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt},
+        ]
         url = f"{endpoint}/openai/deployments/{deployment}/chat/completions?api-version={api_version}"
-        req = urllib.request.Request(
-            url=url,
-            data=json.dumps(payload).encode("utf-8"),
-            headers={"Content-Type": "application/json", "api-key": api_key},
-            method="POST",
-        )
-        try:
-            with urllib.request.urlopen(req, timeout=60) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            choices = body.get("choices") or []
-            if not choices:
-                return None
-            msg = (choices[0].get("message") or {}).get("content")
-            return msg.strip() if isinstance(msg, str) and msg.strip() else None
-        except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
-            return None
+        for token_field in ["max_completion_tokens", "max_tokens"]:
+            payload = {
+                "messages": base_messages,
+                token_field: 1400,
+            }
+            req = urllib.request.Request(
+                url=url,
+                data=json.dumps(payload).encode("utf-8"),
+                headers={"Content-Type": "application/json", "api-key": api_key},
+                method="POST",
+            )
+            try:
+                with urllib.request.urlopen(req, timeout=60) as resp:
+                    body = json.loads(resp.read().decode("utf-8"))
+                choices = body.get("choices") or []
+                if not choices:
+                    continue
+                msg = (choices[0].get("message") or {}).get("content")
+                if isinstance(msg, str) and msg.strip():
+                    return msg.strip()
+            except urllib.error.HTTPError as e:
+                try:
+                    err_body = e.read().decode("utf-8", errors="ignore")
+                except Exception:
+                    err_body = ""
+                print(
+                    f"Azure chat full HTTPError status={getattr(e, 'code', 'unknown')} "
+                    f"deployment={deployment} api_version={api_version} token_field={token_field} "
+                    f"body={err_body[:400]}",
+                    flush=True,
+                )
+                continue
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+                print(
+                    f"Azure chat full error deployment={deployment} api_version={api_version} "
+                    f"token_field={token_field} error={e}",
+                    flush=True,
+                )
+                continue
+        return None
 
     @staticmethod
     def _extract_invoice_supply_address(invoice: Dict[str, Any]) -> Optional[str]:
@@ -1597,7 +1618,7 @@ class ChatService:
     def _answer_with_azure(question: str, snippets: List[Dict[str, str]]) -> Optional[str]:
         endpoint = (os.environ.get("AZURE_OPENAI_ENDPOINT") or AZURE_OPENAI_ENDPOINT_DEFAULT).strip().rstrip("/")
         api_key = (os.environ.get("AZURE_OPENAI_API_KEY") or AZURE_OPENAI_API_KEY_DEFAULT).strip()
-        deployment = AZURE_OPENAI_DEPLOYMENT_DEFAULT
+        deployment = (os.environ.get("AZURE_OPENAI_DEPLOYMENT") or AZURE_OPENAI_DEPLOYMENT_DEFAULT).strip()
         api_version = (os.environ.get("AZURE_OPENAI_API_VERSION") or AZURE_OPENAI_API_VERSION_DEFAULT).strip()
         if not endpoint or not api_key or not deployment:
             return None
@@ -1634,33 +1655,51 @@ class ChatService:
                 f"Evidence snippets:\n{context_block}\n\n"
                 "Provide a direct answer grounded only in this evidence."
             )
-            payload = {
-                "messages": [
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
-                "max_completion_tokens": cfg["max_completion_tokens"],
-            }
-            req = urllib.request.Request(
-                url=url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "api-key": api_key,
-                },
-                method="POST",
-            )
-            try:
-                with urllib.request.urlopen(req, timeout=45) as resp:
-                    body = json.loads(resp.read().decode("utf-8"))
-                choices = body.get("choices") or []
-                if not choices:
+            for token_field in ["max_completion_tokens", "max_tokens"]:
+                payload = {
+                    "messages": [
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": user_prompt},
+                    ],
+                    token_field: cfg["max_completion_tokens"],
+                }
+                req = urllib.request.Request(
+                    url=url,
+                    data=json.dumps(payload).encode("utf-8"),
+                    headers={
+                        "Content-Type": "application/json",
+                        "api-key": api_key,
+                    },
+                    method="POST",
+                )
+                try:
+                    with urllib.request.urlopen(req, timeout=45) as resp:
+                        body = json.loads(resp.read().decode("utf-8"))
+                    choices = body.get("choices") or []
+                    if not choices:
+                        continue
+                    msg = (choices[0].get("message") or {}).get("content")
+                    if isinstance(msg, str) and msg.strip():
+                        return msg.strip()
+                except urllib.error.HTTPError as e:
+                    try:
+                        err_body = e.read().decode("utf-8", errors="ignore")
+                    except Exception:
+                        err_body = ""
+                    print(
+                        f"Azure chat snippet HTTPError status={getattr(e, 'code', 'unknown')} "
+                        f"deployment={deployment} api_version={api_version} token_field={token_field} "
+                        f"body={err_body[:400]}",
+                        flush=True,
+                    )
                     continue
-                msg = (choices[0].get("message") or {}).get("content")
-                if isinstance(msg, str) and msg.strip():
-                    return msg.strip()
-            except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError, json.JSONDecodeError):
-                continue
+                except (urllib.error.URLError, TimeoutError, json.JSONDecodeError) as e:
+                    print(
+                        f"Azure chat snippet error deployment={deployment} api_version={api_version} "
+                        f"token_field={token_field} error={e}",
+                        flush=True,
+                    )
+                    continue
         return None
 
     @staticmethod
