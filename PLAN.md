@@ -22,6 +22,7 @@ Invoice Validation Tool - Current Plan (Local POC)
   - direct comparison when data exists
   - prediction marker when direct data is insufficient
   - explicit unavailable messaging when prediction is not possible
+  - for single-rate MPANs with multiple matched meter IDs, choose closest-usage meter to avoid over-aggregation
 - Floating chat toggle button with compact chat panel.
 - Chat message tiles (user/bot), collapsible references, formatted bot response rendering.
 - Invoice address extraction fields for Q&A:

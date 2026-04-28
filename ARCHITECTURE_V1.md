@@ -133,6 +133,10 @@ Checks implemented:
 Tariff and meter usage logic:
 - `day_night`: use full 24-hour `half-hour.data` over invoice date range.
 - `single`: use `day.data` over invoice date range.
+- Multiple meter matches:
+  - when MPAN-last4 maps to multiple meter IDs, single-rate path picks one meter by closest usage to invoice usage (prevents over-aggregation from summing unrelated premises).
+- Prediction behavior:
+  - predicted usage may be `0` when history rows exist but all historical values are zero.
 
 Meter toggle:
 - `compare_meter_data = true|false` supported at API.

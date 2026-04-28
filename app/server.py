@@ -868,6 +868,7 @@ class InvoiceService:
 @dataclass
 class MeterSnapshot:
     meter_by_last4: Dict[str, List[str]]
+    meter_label_by_id: Dict[str, str]
     half_hour_rows: List[Tuple[str, datetime, float]]
     day_rows: List[Tuple[str, date, float]]
     half_hour_wh_converted: int = 0
@@ -883,6 +884,7 @@ class MeterService:
             return cls._cache
 
         meter_by_last4: Dict[str, List[str]] = {}
+        meter_label_by_id: Dict[str, str] = {}
         meters_path = METER_DIR / "meters.data"
         if meters_path.exists():
             for line in meters_path.read_text(encoding="utf-8", errors="ignore").splitlines():
@@ -891,6 +893,7 @@ class MeterService:
                     continue
                 meter_id = parts[0].strip()
                 label = parts[1]
+                meter_label_by_id[meter_id] = label.strip()
                 m = re.search(r"\((\d{4,5})\)", label)
                 if not m:
                     continue
@@ -948,6 +951,7 @@ class MeterService:
 
         cls._cache = MeterSnapshot(
             meter_by_last4=meter_by_last4,
+            meter_label_by_id=meter_label_by_id,
             half_hour_rows=half_hour_rows,
             day_rows=day_rows,
             half_hour_wh_converted=half_hour_wh_converted,
@@ -1485,13 +1489,40 @@ class ValidationService:
                     "expected_energy_cost_from_meter": expected_from_meter,
                 }
         else:
-            total_usage = 0.0
+            per_meter_usage: Dict[str, float] = {mid: 0.0 for mid in meter_ids}
             for meter_id, d, value in meter.day_rows:
-                if meter_id not in meter_ids:
+                if meter_id not in per_meter_usage:
                     continue
                 if d < period_start or d > period_end:
                     continue
-                total_usage += value
+                per_meter_usage[meter_id] += value
+
+            selected_meter_ids = list(meter_ids)
+            total_usage = sum(per_meter_usage.values())
+            if len(meter_ids) > 1 and invoice_total > 0:
+                best_mid = min(
+                    meter_ids,
+                    key=lambda mid: abs((per_meter_usage.get(mid) or 0.0) - invoice_total),
+                )
+                selected_meter_ids = [best_mid]
+                total_usage = per_meter_usage.get(best_mid, 0.0)
+                evidence.append({
+                    "source": "meter:selection",
+                    "mpan": mpan,
+                    "details": (
+                        f"Multiple meter IDs matched MPAN last4={last4}; selected meter_id={best_mid} "
+                        f"(label='{meter.meter_label_by_id.get(best_mid, '')}') by closest usage to invoice total."
+                    ),
+                })
+            elif len(meter_ids) > 1:
+                evidence.append({
+                    "source": "meter:selection",
+                    "mpan": mpan,
+                    "details": (
+                        f"Multiple meter IDs matched MPAN last4={last4}; using aggregate across meter_id(s) {selected_meter_ids} "
+                        f"(invoice usage unavailable/zero)."
+                    ),
+                })
             if total_usage == 0.0:
                 reasons.append({
                     "code": "METER_DATA_UNAVAILABLE",
@@ -1548,7 +1579,10 @@ class ValidationService:
                 evidence.append({
                     "source": "meter:day.data",
                     "mpan": mpan,
-                    "details": f"Aggregated meter kWh Total={round(total_usage, 4)} for single-rate tariff.",
+                    "details": (
+                        f"Aggregated meter kWh Total={round(total_usage, 4)} for single-rate tariff "
+                        f"from meter_id(s) {selected_meter_ids}."
+                    ),
                 })
                 if invoice_total > 0 and not ValidationService._within_meter_tolerance(invoice_total, total_usage, meter_tolerance_pct):
                     reasons.append({

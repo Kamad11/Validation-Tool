@@ -23,6 +23,8 @@ This project runs a local chatbot + validation engine for electricity invoices.
   - `Meter Data/meters.data` (MPAN-last4 mapping)
   - `Meter Data/half-hour.data` (day/night tariffs)
   - `Meter Data/day.data` (single-rate tariffs)
+- If one MPAN-last4 maps to multiple meter IDs, single-rate comparison now selects the closest-usage meter to the invoice usage (instead of summing all IDs).
+- Predicted meter values can legitimately be `0` when historical meter rows exist but values are all zero.
 - For day/night validations, half-hour records are aggregated across the full 24-hour period from the invoice date range.
 - Return `PASS/FAIL`, reason codes, evidence, and weighted score:
   - Green: >=95
