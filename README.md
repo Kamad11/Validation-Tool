@@ -6,6 +6,10 @@ This project runs a local chatbot + validation engine for electricity invoices.
 - Option to load existing bundled contract files from the project root.
 - Upload contract Excel files and upsert by `MPAN` (overwrite existing, insert new).
 - Upload invoice PDFs, extract readable fields and line items.
+- Hybrid invoice parsing:
+  - Azure Document Intelligence (`prebuilt-invoice`) when available
+  - `pypdf` extraction as fallback/alternative
+  - automatic quality-based selection of parsed result
 - Persist full extracted invoice text for grounded Q&A.
 - Validate invoice vs contract with strict exact checks.
 - Validate using invoice date range (supports variable periods like 24, 31, 92 days).
@@ -74,6 +78,10 @@ python tests\smoke_test.py
 - `AZURE_OPENAI_API_KEY` (for grounded chat completion)
 - `AZURE_OPENAI_DEPLOYMENT` (optional override; hardcoded default is `gpt-5-mini`)
 - `AZURE_OPENAI_API_VERSION` (optional override; hardcoded default is `2024-10-21`)
+- `DOCUMENT_INTELLIGENCE_ENDPOINT` (optional override; hardcoded default in `app/server.py`)
+- `DOCUMENT_INTELLIGENCE_API_KEY` (optional override; hardcoded default in `app/server.py`)
+- `DOCUMENT_INTELLIGENCE_MODEL` (optional override; hardcoded default is `prebuilt-invoice`)
+- `DOCUMENT_INTELLIGENCE_API_VERSION` (optional override; hardcoded default is `2024-11-30`)
 
 Minimum required (PowerShell, current session only):
 ```powershell
@@ -91,6 +99,7 @@ $env:AZURE_OPENAI_API_KEY = "<your-api-key>"
 ## Notes
 - Chat is evidence-grounded using stored invoice/contract/validation context.
 - If Azure chat fails, the response includes a short `Diagnostic` line to help identify config/connectivity issues.
+- App is Python 3.13+ compatible (no runtime `cgi` dependency).
 
 ## Push To GitHub
 

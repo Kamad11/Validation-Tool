@@ -1,11 +1,12 @@
-import cgi
 import json
+import io
 import os
 import re
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 from decimal import Decimal, InvalidOperation
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
@@ -28,6 +29,12 @@ AZURE_OPENAI_API_KEY_DEFAULT = ""
 AZURE_OPENAI_DEPLOYMENT_DEFAULT = "gpt-5-mini"
 AZURE_OPENAI_API_VERSION_DEFAULT = "2024-10-21"
 
+# Temporary hardcoded Azure Document Intelligence settings (user requested).
+DOCUMENT_INTELLIGENCE_ENDPOINT_DEFAULT = "https://documentintelligence-pov-aliando.cognitiveservices.azure.com/"
+DOCUMENT_INTELLIGENCE_API_KEY_DEFAULT = ""
+DOCUMENT_INTELLIGENCE_API_VERSION_DEFAULT = "2024-11-30"
+DOCUMENT_INTELLIGENCE_MODEL_DEFAULT = "prebuilt-invoice"
+
 CONTRACT_STORE = DATA_STORE_DIR / "contracts.json"
 INVOICE_STORE = DATA_STORE_DIR / "invoices.json"
 VALIDATION_STORE = DATA_STORE_DIR / "validations.json"
@@ -37,7 +44,11 @@ for directory in [DATA_STORE_DIR, UPLOAD_DIR]:
 
 
 def utc_now_iso() -> str:
-    return datetime.utcnow().isoformat() + "Z"
+    return datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def utc_timestamp_int() -> int:
+    return int(datetime.now(timezone.utc).timestamp())
 
 
 def parse_money(value: str) -> Optional[float]:
@@ -278,11 +289,56 @@ class ContractService:
 
 class InvoiceService:
     MPAN_PATTERN = re.compile(r"\b(\d{13})\b")
+    _last_di_error: Optional[str] = None
+
+    @staticmethod
+    def _set_di_error(message: str) -> None:
+        InvoiceService._last_di_error = (message or "")[:700]
 
     @staticmethod
     def parse_pdf(file_path: Path) -> Dict[str, Any]:
+        InvoiceService._last_di_error = None
+        di_result = InvoiceService._analyze_with_document_intelligence(file_path)
+        di_page_texts = di_result.get("page_texts") if di_result else []
         reader = PdfReader(str(file_path))
-        page_texts = [(p.extract_text() or "") for p in reader.pages]
+        pdf_page_texts = [(p.extract_text() or "") for p in reader.pages]
+
+        candidates: List[Dict[str, Any]] = []
+        if di_page_texts:
+            di_record = InvoiceService._build_invoice_record_from_pages(file_path, di_page_texts)
+            di_record = InvoiceService._apply_di_structured_overrides(di_record, di_result or {})
+            di_record["document_intelligence"] = di_result
+            di_record["document_intelligence_available"] = True
+            di_record["document_intelligence_error"] = None
+            di_record["extraction_source"] = "document_intelligence"
+            candidates.append(di_record)
+
+        py_record = InvoiceService._build_invoice_record_from_pages(file_path, pdf_page_texts)
+        py_record["document_intelligence"] = None
+        py_record["document_intelligence_available"] = False
+        py_record["document_intelligence_error"] = InvoiceService._last_di_error if not di_page_texts else None
+        py_record["extraction_source"] = "pypdf"
+        candidates.append(py_record)
+
+        record = max(candidates, key=InvoiceService._record_quality_score)
+
+        invoices = load_json(INVOICE_STORE, {})
+        invoices[record["invoice_number"]] = record
+        save_json(INVOICE_STORE, invoices)
+        return record
+
+    @staticmethod
+    def _record_quality_score(record: Dict[str, Any]) -> int:
+        mpans = record.get("mpans") or {}
+        energy_rows = sum(len((m.get("energy_rates") or [])) for m in mpans.values())
+        standing_rows = sum(1 for m in mpans.values() if m.get("standing_charge"))
+        mpan_count = len(mpans)
+        issue = 1 if record.get("invoice_issue_date") else 0
+        period = 1 if record.get("invoice_period_start") and record.get("invoice_period_end") else 0
+        return (energy_rows * 6) + (standing_rows * 4) + (mpan_count * 2) + issue + period
+
+    @staticmethod
+    def _build_invoice_record_from_pages(file_path: Path, page_texts: List[str]) -> Dict[str, Any]:
         text = "\n".join(page_texts)
         flat = " ".join(text.split())
 
@@ -291,7 +347,7 @@ class InvoiceService:
         period_match = re.search(r"invoice period:\s*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2,4})\s*-\s*([0-9]{1,2}\s+[A-Za-z]{3}\s+[0-9]{2,4})", flat, re.IGNORECASE)
         total_match = re.search(r"Total to pay \(incl\. VAT\)\s*[^\d\s]?([0-9,]+\.[0-9]{2})", flat, re.IGNORECASE)
 
-        invoice_number = invoice_number_match.group(1) if invoice_number_match else f"unknown-{int(datetime.utcnow().timestamp())}"
+        invoice_number = invoice_number_match.group(1) if invoice_number_match else f"unknown-{utc_timestamp_int()}"
         issue_date_raw = issue_date_match.group(1) if issue_date_match else None
         period_start_raw = period_match.group(1) if period_match else None
         period_end_raw = period_match.group(2) if period_match else None
@@ -318,7 +374,7 @@ class InvoiceService:
                 "standing_charge": standing_blocks.get(mpan),
             }
 
-        record = {
+        return {
             "invoice_number": invoice_number,
             "invoice_issue_date": issue_date_raw,
             "invoice_period_start": period_start_raw,
@@ -338,10 +394,258 @@ class InvoiceService:
             "parsed_at": utc_now_iso(),
         }
 
-        invoices = load_json(INVOICE_STORE, {})
-        invoices[invoice_number] = record
-        save_json(INVOICE_STORE, invoices)
+    @staticmethod
+    def _apply_di_structured_overrides(record: Dict[str, Any], di_result: Dict[str, Any]) -> Dict[str, Any]:
+        documents = di_result.get("documents") or []
+        if not documents:
+            return record
+        doc = documents[0] if documents else {}
+        fields = doc.get("fields") or {}
+
+        def _field_content(name: str) -> Optional[str]:
+            v = fields.get(name) or {}
+            content = v.get("content")
+            if content is None:
+                return None
+            text = str(content).strip()
+            return text or None
+
+        def _field_number(name: str) -> Optional[float]:
+            v = fields.get(name) or {}
+            num = v.get("valueNumber")
+            if isinstance(num, (int, float)):
+                return float(num)
+            content = v.get("content")
+            return parse_money(str(content)) if content is not None else None
+
+        invoice_id = _field_content("InvoiceId")
+        if invoice_id:
+            digits = re.sub(r"\D", "", invoice_id)
+            if len(digits) >= 6:
+                record["invoice_number"] = digits
+
+        inv_date = _field_content("InvoiceDate")
+        due_date = _field_content("DueDate")
+        if inv_date and not record.get("invoice_issue_date"):
+            record["invoice_issue_date"] = inv_date
+        if not record.get("invoice_period_end") and due_date:
+            record["invoice_period_end"] = due_date
+
+        total = _field_number("InvoiceTotal")
+        if total is not None:
+            record["invoice_total_incl_vat"] = total
+
+        bill_to = _field_content("CustomerAddress")
+        if bill_to:
+            record["invoice_billing_address"] = bill_to
+        ship_to = _field_content("ServiceAddress")
+        if ship_to:
+            record["invoice_supply_address"] = ship_to
+
+        record["document_intelligence_invoice_fields"] = {
+            k: {
+                "type": (v or {}).get("type"),
+                "content": (v or {}).get("content"),
+                "confidence": (v or {}).get("confidence"),
+            }
+            for k, v in fields.items()
+        }
+
+        # Preserve full DI line items for audits/chat even if validation parser keeps regex logic.
+        items_raw = (fields.get("Items") or {}).get("valueArray") or []
+        record["document_intelligence_items"] = [
+            item.get("content") if isinstance(item, dict) else str(item)
+            for item in items_raw
+        ]
         return record
+
+    @staticmethod
+    def _analyze_with_document_intelligence(file_path: Path) -> Optional[Dict[str, Any]]:
+        endpoint = (
+            os.environ.get("DOCUMENT_INTELLIGENCE_ENDPOINT")
+            or DOCUMENT_INTELLIGENCE_ENDPOINT_DEFAULT
+        ).strip().rstrip("/")
+        api_key = (
+            os.environ.get("DOCUMENT_INTELLIGENCE_API_KEY")
+            or DOCUMENT_INTELLIGENCE_API_KEY_DEFAULT
+        ).strip()
+        model = (
+            os.environ.get("DOCUMENT_INTELLIGENCE_MODEL")
+            or DOCUMENT_INTELLIGENCE_MODEL_DEFAULT
+        ).strip()
+        api_version = (
+            os.environ.get("DOCUMENT_INTELLIGENCE_API_VERSION")
+            or DOCUMENT_INTELLIGENCE_API_VERSION_DEFAULT
+        ).strip()
+
+        if not endpoint or not api_key:
+            InvoiceService._set_di_error(
+                f"Missing DI config: endpoint_set={bool(endpoint)} api_key_set={bool(api_key)} model='{model}' api_version='{api_version}'"
+            )
+            return None
+
+        analyze_url = (
+            f"{endpoint}/documentintelligence/documentModels/{model}:analyze"
+            f"?api-version={api_version}&features=keyValuePairs"
+        )
+        try:
+            payload = file_path.read_bytes()
+        except OSError:
+            return None
+
+        req = urllib.request.Request(
+            url=analyze_url,
+            data=payload,
+            headers={
+                "Content-Type": "application/pdf",
+                "Ocp-Apim-Subscription-Key": api_key,
+            },
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                operation_location = resp.headers.get("Operation-Location")
+            if not operation_location:
+                InvoiceService._set_di_error("DI analyze did not return Operation-Location header.")
+                return None
+            print(
+                f"DI analyze submitted model={model} api_version={api_version} operation_location={operation_location}",
+                flush=True,
+            )
+            InvoiceService._set_di_error(None)
+        except urllib.error.HTTPError as e:
+            try:
+                err_body = e.read().decode("utf-8", errors="ignore")
+            except Exception:
+                err_body = ""
+            msg = (
+                f"DI analyze HTTP {getattr(e, 'code', 'unknown')} model='{model}' api_version='{api_version}' "
+                f"response={err_body[:350]}"
+            )
+            print(msg, flush=True)
+            InvoiceService._set_di_error(msg)
+            return None
+        except urllib.error.URLError as e:
+            InvoiceService._set_di_error(
+                f"DI analyze URLError model='{model}' api_version='{api_version}' reason={e}."
+            )
+            return None
+        except TimeoutError:
+            InvoiceService._set_di_error(
+                f"DI analyze timeout model='{model}' api_version='{api_version}'."
+            )
+            return None
+
+        for _ in range(40):
+            poll_req = urllib.request.Request(
+                url=operation_location,
+                headers={"Ocp-Apim-Subscription-Key": api_key},
+                method="GET",
+            )
+            try:
+                with urllib.request.urlopen(poll_req, timeout=30) as poll_resp:
+                    body = json.loads(poll_resp.read().decode("utf-8"))
+            except urllib.error.HTTPError as e:
+                try:
+                    err_body = e.read().decode("utf-8", errors="ignore")
+                except Exception:
+                    err_body = ""
+                msg = (
+                    f"DI poll HTTP {getattr(e, 'code', 'unknown')} model='{model}' api_version='{api_version}' "
+                    f"response={err_body[:350]}"
+                )
+                print(msg, flush=True)
+                InvoiceService._set_di_error(msg)
+                return None
+            except (urllib.error.URLError, TimeoutError, json.JSONDecodeError):
+                InvoiceService._set_di_error(
+                    f"DI poll failed model='{model}' api_version='{api_version}'."
+                )
+                return None
+
+            status = str(body.get("status") or "").lower()
+            if status == "succeeded":
+                analyze_result = body.get("analyzeResult") or {}
+                pages = analyze_result.get("pages") or []
+                if not pages:
+                    InvoiceService._set_di_error("DI succeeded but returned no pages.")
+                    return None
+                page_texts: List[str] = []
+                for page in pages:
+                    lines = page.get("lines") or []
+                    if not lines:
+                        page_texts.append("")
+                        continue
+                    page_texts.append("\n".join((line.get("content") or "").strip() for line in lines if line.get("content")))
+                if not any(page_texts):
+                    InvoiceService._set_di_error("DI succeeded but page_texts were empty.")
+                    return None
+
+                key_value_pairs = []
+                for kv in (analyze_result.get("keyValuePairs") or []):
+                    key_obj = kv.get("key") or {}
+                    val_obj = kv.get("value") or {}
+                    key_value_pairs.append({
+                        "key": key_obj.get("content"),
+                        "value": val_obj.get("content"),
+                        "confidence": kv.get("confidence"),
+                    })
+
+                tables_extracted = []
+                for t_idx, table in enumerate((analyze_result.get("tables") or []), start=1):
+                    row_count = int(table.get("rowCount") or 0)
+                    col_count = int(table.get("columnCount") or 0)
+                    cells = table.get("cells") or []
+                    grid = [["" for _ in range(col_count)] for _ in range(row_count)]
+                    for cell in cells:
+                        r = int(cell.get("rowIndex") or 0)
+                        c = int(cell.get("columnIndex") or 0)
+                        txt = (cell.get("content") or "").strip()
+                        if 0 <= r < row_count and 0 <= c < col_count:
+                            grid[r][c] = txt
+                    tables_extracted.append({
+                        "table_index": t_idx,
+                        "row_count": row_count,
+                        "column_count": col_count,
+                        "cells": cells,
+                        "grid": grid,
+                    })
+
+                paragraphs = [
+                    {
+                        "content": p.get("content"),
+                        "role": p.get("role"),
+                        "boundingRegions": p.get("boundingRegions"),
+                    }
+                    for p in (analyze_result.get("paragraphs") or [])
+                ]
+
+                return {
+                    "model_id": analyze_result.get("modelId"),
+                    "api_version": api_version,
+                    "documents": analyze_result.get("documents") or [],
+                    "page_texts": page_texts,
+                    "pages": pages,
+                    "tables": tables_extracted,
+                    "key_value_pairs": key_value_pairs,
+                    "paragraphs": paragraphs,
+                    "content": analyze_result.get("content"),
+                    "raw_analyze_result": analyze_result,
+                }
+            if status == "failed":
+                err_obj = body.get("error") or {}
+                msg = (
+                    f"DI analyze status=failed model='{model}' api_version='{api_version}' "
+                    f"code={err_obj.get('code')} message={err_obj.get('message')}"
+                )
+                print(msg, flush=True)
+                InvoiceService._set_di_error(msg)
+                return None
+            time.sleep(1.0)
+        InvoiceService._set_di_error(
+            f"DI analyze polling timed out model='{model}' api_version='{api_version}'."
+        )
+        return None
 
     @staticmethod
     def _extract_energy_blocks(flat_text: str) -> Dict[str, List[Dict[str, Any]]]:
@@ -979,7 +1283,7 @@ class ValidationService:
             elif unavailable_count > 0:
                 meter_note += f" Not enough meter data for direct comparison/prediction for {unavailable_count} MPAN(s)."
         result = {
-            "validation_id": f"VAL-{invoice.get('invoice_number', 'unknown')}-{int(datetime.utcnow().timestamp())}",
+            "validation_id": f"VAL-{invoice.get('invoice_number', 'unknown')}-{utc_timestamp_int()}",
             "invoice_number": invoice.get("invoice_number"),
             "meter_comparison_enabled": compare_meter_data,
             "meter_data_note": meter_note,
@@ -2030,7 +2334,10 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
         self.end_headers()
-        self.wfile.write(raw)
+        try:
+            self.wfile.write(raw)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            return
 
     def _serve_static(self, path: str) -> None:
         if path == "/":
@@ -2051,7 +2358,10 @@ class AppHandler(BaseHTTPRequestHandler):
         self.send_header("Content-Type", ctype)
         self.send_header("Content-Length", str(len(content)))
         self.end_headers()
-        self.wfile.write(content)
+        try:
+            self.wfile.write(content)
+        except (BrokenPipeError, ConnectionAbortedError, ConnectionResetError):
+            return
 
     def do_OPTIONS(self) -> None:
         self.send_response(204)
@@ -2157,28 +2467,52 @@ class AppHandler(BaseHTTPRequestHandler):
         return json.loads(raw.decode("utf-8"))
 
     def _parse_multipart(self) -> Dict[str, Any]:
-        form = cgi.FieldStorage(
-            fp=self.rfile,
-            headers=self.headers,
-            environ={"REQUEST_METHOD": "POST", "CONTENT_TYPE": self.headers.get("Content-Type", "")},
-        )
+        # Python 3.13+ compatible multipart parser (no cgi dependency).
+        content_type = self.headers.get("Content-Type", "")
+        content_length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(content_length) if content_length > 0 else b""
+        m = re.search(r'boundary="?([^";]+)"?', content_type, re.IGNORECASE)
+        if not m:
+            return {}
+        boundary = m.group(1).encode("utf-8")
+        delimiter = b"--" + boundary
+        parts = body.split(delimiter)
         fields: Dict[str, Any] = {}
-        # cgi.FieldStorage does not support truthiness; bool(form) raises TypeError.
-        if getattr(form, "list", None) is None:
-            return fields
-        for key in form.keys():
-            item = form[key]
-            if isinstance(item, list):
-                item = item[0]
-            if getattr(item, "filename", None):
-                fields[key] = item
+
+        for part in parts:
+            part = part.strip()
+            if not part or part == b"--":
+                continue
+            if part.startswith(b"\r\n"):
+                part = part[2:]
+            if b"\r\n\r\n" not in part:
+                continue
+            header_blob, content = part.split(b"\r\n\r\n", 1)
+            content = content.rstrip(b"\r\n")
+            headers_txt = header_blob.decode("utf-8", errors="ignore")
+            cd_match = re.search(r"Content-Disposition:\s*form-data;\s*(.+)", headers_txt, re.IGNORECASE)
+            if not cd_match:
+                continue
+            disp = cd_match.group(1)
+            name_m = re.search(r'name="([^"]+)"', disp)
+            if not name_m:
+                continue
+            field_name = name_m.group(1)
+            file_m = re.search(r'filename="([^"]*)"', disp)
+            if file_m and file_m.group(1) != "":
+                filename = file_m.group(1)
+                fields[field_name] = type(
+                    "MultipartItem",
+                    (),
+                    {"filename": filename, "file": io.BytesIO(content)},
+                )()
             else:
-                fields[key] = item.value
+                fields[field_name] = content.decode("utf-8", errors="ignore")
         return fields
 
     def _save_upload(self, file_item: Any) -> Path:
         filename = Path(file_item.filename).name
-        save_path = UPLOAD_DIR / f"{int(datetime.utcnow().timestamp())}_{filename}"
+        save_path = UPLOAD_DIR / f"{utc_timestamp_int()}_{filename}"
         save_path.write_bytes(file_item.file.read())
         return save_path
 

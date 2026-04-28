@@ -86,7 +86,10 @@ Key behavior:
 
 ## 5.2 InvoiceService
 Responsibilities:
-- Parse PDF text with `pypdf`.
+- Parse PDF with a hybrid strategy:
+  - Azure Document Intelligence (`prebuilt-invoice`)
+  - `pypdf` extraction
+  - quality-based selection of final parsed record
 - Extract invoice-level fields:
   - invoice number
   - issue date
@@ -283,6 +286,7 @@ sequenceDiagram
 - Contract ingestion/upsert by MPAN.
 - Optional use of bundled contract files.
 - Multi-MPAN invoice parsing/validation.
+- Hybrid invoice extraction (DI + pypdf with quality-based selector).
 - Variable invoice period support (not fixed month).
 - Full invoice-text persistence.
 - Strict deterministic reason-code validation.
@@ -320,6 +324,11 @@ Smoke test:
 & "C:\Users\kamad\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" tests\smoke_test.py
 ```
 
+DI vs pypdf comparison:
+```powershell
+& "C:\Users\kamad\.cache\codex-runtimes\codex-primary-runtime\dependencies\python\python.exe" tests\compare_di_vs_pypdf.py
+```
+
 ---
 
 ## 13) Guidance For Next Contributors (Human/AI)
@@ -349,9 +358,12 @@ Use this section as the primary routing guide when implementing changes from nat
     - `_normalize_rate_value`, `_find_rate`, `_find_first_rate`
 
 - `InvoiceService`
-  - Edit when prompt mentions: PDF extraction, invoice number/date/period parsing, MPAN extraction, energy/standing line parsing.
+  - Edit when prompt mentions: DI/pypdf extraction strategy, invoice number/date/period parsing, MPAN extraction, energy/standing line parsing.
   - Primary methods:
     - `InvoiceService.parse_pdf(...)`
+    - `InvoiceService._analyze_with_document_intelligence(...)`
+    - `InvoiceService._apply_di_structured_overrides(...)`
+    - `InvoiceService._record_quality_score(...)`
     - `_extract_energy_blocks(...)`
     - `_extract_standing_blocks(...)`
     - `_normalize_invoice_rate(...)`
